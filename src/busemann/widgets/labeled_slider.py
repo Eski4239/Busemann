@@ -12,7 +12,8 @@ class LabeledSlider(QWidget):
     value_changed = Signal(float)
     released = Signal()
 
-    def __init__(self, label, minimum, maximum, step, value, decimals=2, unit="", parent=None):
+    def __init__(self, label, minimum, maximum, step, value, decimals=2, unit="",
+                 quantity="dimensionless", parent=None):
         super().__init__(parent)
         self._min, self._step = minimum, step
         steps = round((maximum - minimum) / step)
@@ -20,7 +21,7 @@ class LabeledSlider(QWidget):
         self.label = QLabel(theme.caps(label))
         self.label.setObjectName("fieldLabel")
         self.label.setFont(theme.label_font())
-        self.field = NumberField(value, decimals, minimum, maximum, unit=unit)
+        self.field = NumberField(value, decimals, minimum, maximum, unit=unit, quantity=quantity)
         self.field.setFixedWidth(theme.tokens.space(12))
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setRange(0, steps)

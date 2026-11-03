@@ -179,9 +179,11 @@ def test_above_design_lip_notice_has_cfd_tooltip(qtbot, window):
 def _drag(qtbot, window, steps=60):
     """Drag the off-design slider 2.45 -> 3.04 in 0.01 steps, 8 ms apart. Returns the tab,
     the wall-clock gaps between steps (ms) and the off-design results received."""
+    import gc
     import time
 
     tab = _open_tab(qtbot, window)
+    gc.collect()                       # measure the drag, not garbage left by earlier tests
     received = []
     window.state.off_design_ready.connect(lambda off, err: received.append(off))
     slider = tab.slider.slider
@@ -212,7 +214,8 @@ def test_slider_drag_coalesces_work_and_ends_on_the_last_value(qtbot, window):
 def test_slider_drag_stays_responsive(qtbot, window):
     """Wall-clock: the event loop keeps turning during a drag (longest step gap < 100 ms)."""
     _, gaps, _ = _drag(qtbot, window)
-    assert max(gaps) < 100.0
+    worst = sorted(gaps)[-5:]
+    assert max(gaps) < 100.0, f"largest step gaps (ms): {[round(g) for g in worst]}"
 
 
 # --- M5 STEP 0: results panel follows the slider Mach on this tab ---------------------

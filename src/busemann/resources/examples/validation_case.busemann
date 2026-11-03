@@ -1,0 +1,33 @@
+{
+  "format": "busemann-project",
+  "schema": 1,
+  "app_version": "0.1.0",
+  "saved_utc": "2026-11-03T11:49:50Z",
+  "inputs": {
+    "mach": 3.0,
+    "atmosphere_mode": "manual",
+    "altitude_m": 20000.0,
+    "p_pa": 10000.0,
+    "T_k": 220.0,
+    "gamma": 1.4,
+    "n_ramps": 2,
+    "method": "oswatitsch",
+    "custom_angles": [],
+    "capture_height_m": 0.1,
+    "units": "SI",
+    "preset": "Validation case",
+    "off_design_mach": null,
+    "max_cowl_enabled": false,
+    "max_cowl_deg": 30.0,
+    "cowl_wedge_deg": 0.0,
+    "view": {
+      "layers": {
+        "shocks": true,
+        "regions": true,
+        "dimensions": false,
+        "grid": false
+      },
+      "tab": "design"
+    }
+  }
+}

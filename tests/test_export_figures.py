@@ -82,3 +82,54 @@ def test_saved_formats_embed_fonts_and_metadata(tmp_path):
     assert b"Inter" in pdf_bytes
     with pytest.raises(ValueError, match="format"):
         F.save_figure(fig, tmp_path / "f.jpg", meta)
+
+
+# --- M7: the export is drawn like the canvas ---------------------------------------------
+
+def test_walls_and_line_weights_match_the_canvas():
+    d = api.design(3.0, 2)
+    fig = F.canvas_figure(P.build(P.skeleton_from(d)))
+    patches = {p.get_gid(): p for p in fig.axes[0].patches}
+    assert patches["ramp"].get_linewidth() == 0.0 and patches["ramp"].get_hatch()   # band only
+    assert patches["cowl"].get_linewidth() == pytest.approx(1.5 * F.PX_TO_PT)       # outlined
+    lines = {ln.get_gid(): ln for ln in fig.axes[0].get_lines()}
+    assert lines["ramp-surface"].get_linewidth() == pytest.approx(2.0 * 0.75)
+    assert lines["shock-0"].get_linewidth() == pytest.approx(2.0 * 0.75)
+    region = patches["region-1"]
+    assert region.get_linewidth() == pytest.approx(0.75)
+
+
+def test_legend_is_discrete_classes_with_ranges():
+    d = api.design(3.0, 2)
+    pic = P.build(P.skeleton_from(d))
+    fig = F.canvas_figure(pic)
+    edges = P.mach_bins(min(r.state.M for r in pic.regions), pic.skeleton.regions[0].M)
+    assert fig.legend_labels == [f"{a:g}–{b:g}" for a, b in zip(edges, edges[1:])]
+    legend_ax = fig.axes[1]
+    heights = {round(p.get_height(), 9) for p in legend_ax.patches}
+    assert heights == {1.0}                                   # equal-height blocks
+    assert [t.get_text() for t in legend_ax.get_yticklabels()] == fig.legend_labels
+
+
+def test_png_has_a_tight_fixed_margin(tmp_path):
+    from PIL import Image, ImageChops
+
+    d = api.design(3.0, 2)
+    path = F.save_figure(F.canvas_figure(P.build(P.skeleton_from(d)), "title"),
+                         tmp_path / "t.png", {})
+    img = Image.open(path).convert("RGB")
+    box = ImageChops.difference(img, Image.new("RGB", img.size, "white")).getbbox()
+    margin_px = F.PAD_IN * F.PNG_DPI
+    left, top, right, bottom = box
+    # tight: the fixed margin plus at most the text boxes' own padding (font descent)
+    for gap in (left, top, img.width - right, img.height - bottom):
+        assert gap <= margin_px + 12
+
+
+def test_streamtube_is_dotted_like_the_canvas():
+    d = api.design(3.0, 2)
+    pic = P.build(P.skeleton_from(d, api.off_design_point(d, 2.5)))
+    lines = {ln.get_gid(): ln for ln in F.canvas_figure(pic).axes[0].get_lines()}
+    assert lines["streamtube"].get_linewidth() == pytest.approx(0.75)
+    offset, dashes = lines["streamtube"]._unscaled_dash_pattern     # custom dash: Qt DotLine
+    assert (offset, tuple(dashes)) == (F.DOT[0], F.DOT[1])

@@ -58,3 +58,80 @@ def from_display(value, quantity, system):
     factor = _lookup(quantity, system)[1]
     value = np.asarray(value, dtype=float) / factor
     return float(value) if value.ndim == 0 else value
+
+
+# --- typed input with units ------------------------------------------------------------------
+# kind -> {unit: (scale, offset)} with  SI = value * scale + offset.  Kinds and their SI base:
+# length m, altitude m, temperature K, pressure Pa, mass_flow kg/s, angle deg (the app's
+# angle unit), dimensionless (no units).
+ATM = 101325.0
+BAR = 1.0e5
+UNIT_KINDS = {
+    "length": {"m": (1.0, 0.0), "cm": (0.01, 0.0), "mm": (0.001, 0.0), "km": (1000.0, 0.0),
+               "ft": (FT, 0.0), "in": (INCH, 0.0)},
+    "altitude": {"km": (1000.0, 0.0), "m": (1.0, 0.0), "ft": (FT, 0.0),
+                 "kft": (1000.0 * FT, 0.0)},
+    "temperature": {"K": (1.0, 0.0), "°C": (1.0, 273.15), "C": (1.0, 273.15),
+                    "°F": (1.0 / 1.8, 273.15 - 32.0 / 1.8), "F": (1.0 / 1.8, 273.15 - 32.0 / 1.8),
+                    "R": (1.0 / 1.8, 0.0), "°R": (1.0 / 1.8, 0.0)},
+    "pressure": {"Pa": (1.0, 0.0), "kPa": (1000.0, 0.0), "bar": (BAR, 0.0), "psi": (PSI, 0.0),
+                 "atm": (ATM, 0.0)},
+    "mass_flow": {"kg/s": (1.0, 0.0), "lb/s": (LBM, 0.0)},
+    "angle": {"°": (1.0, 0.0), "deg": (1.0, 0.0), "rad": (180.0 / np.pi, 0.0)},
+    "dimensionless": {},
+}
+_KIND_NAMES = {"length": "length", "altitude": "altitude", "temperature": "temperature",
+               "pressure": "pressure", "mass_flow": "mass flow", "angle": "angle",
+               "dimensionless": "number"}
+_NUMBER = r"[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?"
+
+
+class UnitError(ValueError):
+    """Typed input could not be read; the message is shown under the field."""
+
+
+def accepted_units(kind):
+    """Units accepted for a kind, in table order."""
+    return list(UNIT_KINDS[kind])
+
+
+def parse_quantity(text, kind, field_unit=None):
+    """Value of typed text ("65000 ft", "-56.5 C", "2.2") in the field's unit.
+
+    A bare number is taken in `field_unit`. Units of another kind or unknown units raise
+    UnitError with a short message ("ft is not a temperature")."""
+    import re
+
+    if kind not in UNIT_KINDS:
+        raise ValueError(f"unknown kind {kind!r}")
+    m = re.fullmatch(rf"\s*({_NUMBER})\s*(.*?)\s*", text or "")
+    if not m:
+        raise UnitError("Enter a number")
+    value = float(m.group(1).replace(",", "."))
+    if not np.isfinite(value):
+        raise UnitError("Enter a finite number")
+    unit = m.group(2)
+    table = UNIT_KINDS[kind]
+    if not unit:
+        return value
+    if kind == "dimensionless":
+        raise UnitError(f"{unit} is not allowed here: enter a plain number")
+    if unit not in table:
+        lowered = {u.lower(): u for u in table}
+        if unit.lower() in lowered and unit not in ("K", "k"):
+            unit = lowered[unit.lower()]                   # "KPA", "Deg" -> "kPa", "deg"
+        else:
+            others = [k for k, t in UNIT_KINDS.items() if unit in t]
+            if others:
+                name = _KIND_NAMES[kind]
+                article = "an" if name[0] in "aeiou" else "a"
+                raise UnitError(f"{unit} is not {article} {name}")
+            raise UnitError(f"unknown unit '{unit}'")
+    scale, offset = table[unit]
+    si = value * scale + offset
+    if field_unit is None or not field_unit:
+        return si
+    if field_unit not in table:
+        raise ValueError(f"field unit {field_unit!r} is not a {kind} unit")
+    f_scale, f_offset = table[field_unit]
+    return (si - f_offset) / f_scale

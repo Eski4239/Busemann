@@ -32,5 +32,5 @@ def test_about_dialog_tabs(qtbot, window):
 
 def test_help_menu_has_about(window):
     menus = [a.text().replace("&", "") for a in window.menuBar().actions()]
-    assert menus == ["File", "Help"]
+    assert menus == ["File", "Edit", "Help"]
     assert window.about_action.text().replace("&", "") == "About Busemann…"

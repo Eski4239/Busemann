@@ -175,6 +175,31 @@ QSlider::handle:horizontal {
 #drawerTopics { color: $text_muted; font-size: ${size_label}px; }
 #drawerClose { font-size: 16px; color: $text_muted; }
 #explainBody { border: none; background: $surface; }
+#welcomeTitle { font-weight: 600; font-size: 20px; color: $text; }
+#presetCard {
+    background: $surface;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    padding: ${s1}px ${s2}px;
+    text-align: left;
+    color: $text;
+}
+#presetCard:hover { border-color: $accent; }
+#welcomeList {
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    background: $surface;
+}
+#welcomeList::item { padding: 6px ${s1}px; border-bottom: ${border_w}px solid $border; }
+#welcomeList::item:hover { background: $bg; }
+#overlayCard {
+    background: $surface;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+}
+#overlayTitle, #placeholderTitle { font-weight: 600; font-size: 15px; color: $text; }
+#shortcutKey { color: $text; }
+#shortcutAction { color: $text; }
 #chip {
     color: $text;
     background: $bg;

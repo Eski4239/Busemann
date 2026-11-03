@@ -4,20 +4,30 @@ import math
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
+from inletdesign.units import UnitError, accepted_units, parse_quantity
+
 from ..theme import qt as theme
+
+# example typed into the tooltip per quantity kind
+_EXAMPLES = {"altitude": "65000 ft", "length": "12 cm", "temperature": "-56.5 C",
+             "pressure": "1 atm", "angle": "0.3 rad", "mass_flow": "100 lb/s",
+             "dimensionless": "2.2"}
 
 
 class NumberField(QWidget):
     """Emits value_changed(float) only for valid input; invalid input shows a red underline + message.
 
     Bounds are checked, never applied: an out-of-range entry is reported, not clamped.
+    With a `quantity` kind (units.UNIT_KINDS) the text may carry a unit ("65000 ft"); it is
+    converted to the field's unit, and a unit of the wrong kind is reported as an error.
     """
 
     value_changed = Signal(float)
 
     def __init__(self, value=0.0, decimals=2, minimum=None, maximum=None,
-                 min_exclusive=False, unit="", parent=None):
+                 min_exclusive=False, unit="", quantity=None, parent=None):
         super().__init__(parent)
+        self.quantity = quantity
         self._decimals = decimals
         self._min = minimum
         self._max = maximum
@@ -92,13 +102,41 @@ class NumberField(QWidget):
         self.error_label.setText(message or "")
         self.error_label.setVisible(bool(message))
 
+    def units_hint(self):
+        """'Accepts units: km, m, ft, kft (e.g. 65000 ft).' for the tooltip ('' if none)."""
+        if self.quantity is None:
+            return ""
+        units = accepted_units(self.quantity)
+        if not units:
+            return "Enter a plain number (no unit)."
+        return f"Accepts units: {', '.join(units)} (e.g. {_EXAMPLES[self.quantity]})."
+
+    def setToolTip(self, text):
+        """Tooltip text plus the accepted units, on the field, its edit and unit label."""
+        hint = self.units_hint()
+        full = f"{text}\n{hint}" if text and hint else (text or hint)
+        super().setToolTip(full)
+        self.edit.setToolTip(full)
+        self.unit_label.setToolTip(full)
+
     def _validate(self, text):
+        if self.quantity is not None:
+            try:
+                value = parse_quantity(text, self.quantity, self.unit_label.text() or None)
+            except UnitError as exc:
+                return None, str(exc)
+            except ValueError:                 # field unit outside the kind's table
+                return None, "Enter a number"
+            return self._check_range(value)
         try:
             value = float(text.replace(",", "."))
         except ValueError:
             return None, "Enter a number"
         if not math.isfinite(value):
             return None, "Enter a finite number"
+        return self._check_range(value)
+
+    def _check_range(self, value):
         low_bad = self._min is not None and (
             value <= self._min if self._min_exclusive else value < self._min
         )

@@ -72,7 +72,10 @@ class ProjectController(QObject):
         self.update_title()
 
     def name(self):
-        return self.path.name if self.path else "Untitled"
+        if self.path:
+            return self.path.name
+        origin = getattr(self, "origin", None)
+        return f"Untitled (from {origin})" if origin else "Untitled"
 
     def update_title(self):
         self.window.setWindowTitle(f"Busemann — {self.name()}" + (" •" if self.dirty else ""))
@@ -94,6 +97,33 @@ class ProjectController(QObject):
             self.state.load_inputs(inputs)
         finally:
             self._loading = False
+
+    def _clear_history(self):
+        undo = getattr(self.window, "undo", None)
+        if undo is not None:
+            undo.clear()
+
+    def start_from(self, inputs, label=None):
+        """Start a new untitled design from given inputs (welcome window: preset, example)."""
+        self._apply(inputs, dict(P.DEFAULT_VIEW, layers=dict(P.DEFAULT_VIEW["layers"])))
+        self.path = None
+        self.origin = label
+        self._set_dirty(False)
+        self._clear_history()
+
+    def open_example(self, path):
+        """Load a bundled example as an untitled copy (Save never writes into the app)."""
+        try:
+            inputs, view, _ = P.load(path)
+        except P.ProjectError as exc:
+            self.show_error(str(exc))
+            return False
+        self._apply(inputs, view)
+        self.path = None
+        self.origin = f"example {Path(path).stem}"
+        self._set_dirty(False)
+        self._clear_history()
+        return True
 
     # --- prompt --------------------------------------------------------------------------
     def ask_save(self):
@@ -123,7 +153,9 @@ class ProjectController(QObject):
             return False
         self._apply(Inputs(), dict(P.DEFAULT_VIEW, layers=dict(P.DEFAULT_VIEW["layers"])))
         self.path = None
+        self.origin = None
         self._set_dirty(False)
+        self._clear_history()
         return True
 
     def open(self, path=None):
@@ -148,7 +180,9 @@ class ProjectController(QObject):
             return False
         self._apply(inputs, view)
         self.path = path
+        self.origin = None
         self._set_dirty(False)
+        self._clear_history()
         self._add_recent(path)
         self.settings.setValue("project/last_dir", str(path.parent))
         if warnings:
@@ -180,6 +214,7 @@ class ProjectController(QObject):
             self.show_error(f"Cannot save {path.name}: {exc.strerror or exc}")
             return False
         self.path = Path(path)
+        self.origin = None
         self._set_dirty(False)
         self._add_recent(self.path)
         self.settings.setValue("project/last_dir", str(self.path.parent))

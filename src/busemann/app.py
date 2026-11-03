@@ -17,11 +17,32 @@ from .theme import tokens
 from .views import DesignPanel, FlightPanel, ResultsPanel
 from .explain import warm as _warm
 from .tooltips import tip
+from .undo import InputUndo
 from .views.explain_drawer import DRAWER_W, SLIDE_MS, ExplainDrawer
 from .views.offdesign_tab import OffDesignTab
 from .views.export_controller import ExportController
 from .views.project_controller import ProjectController
 from .widgets import divider
+
+
+def _placeholder(title, text, tip_key):
+    """A tab that is not built yet: a centred title and one muted line, nothing else."""
+    page = QWidget()
+    page.setObjectName("placeholderTab")
+    v = QVBoxLayout(page)
+    v.addStretch(1)
+    head = QLabel(title)
+    head.setObjectName("placeholderTitle")
+    head.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    line = QLabel(text)
+    line.setObjectName("muted")
+    line.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    for w in (head, line):
+        w.setToolTip(tip(tip_key))
+    v.addWidget(head)
+    v.addWidget(line)
+    v.addStretch(1)
+    return page
 
 
 def _side_panel(object_name, width, *widgets):
@@ -84,6 +105,13 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.canvas, "Design")
         self.offdesign_tab = OffDesignTab(self.state)
         self.tabs.addTab(self.offdesign_tab, "Off-design")
+        self.analytics_tab = _placeholder(
+            "Analytics", "Trade studies, drag and buzz estimates — coming in M9.",
+            "placeholder.analytics")
+        self.compare_tab = _placeholder(
+            "Compare", "Side-by-side design comparison — coming in M10.", "placeholder.compare")
+        self.tabs.addTab(self.analytics_tab, "Analytics")
+        self.tabs.addTab(self.compare_tab, "Compare")
         self.tabs.currentChanged.connect(self._on_tab)
 
         centre = QWidget()
@@ -98,9 +126,13 @@ class MainWindow(QMainWindow):
 
         self._build_toolbar()
         self._build_status_bar()
+        self.undo = InputUndo(self.state, self)
         self.project = ProjectController(self)
         self.exports = ExportController(self, self.project.export_menu)
+        self._build_edit_menu()
         help_menu = self.menuBar().addMenu("&Help")
+        self.help_menu = help_menu
+        self._build_shortcuts(help_menu)
         self.about_action = help_menu.addAction("&About Busemann…")
         self.about_action.triggered.connect(self.show_about)
         self.setAcceptDrops(True)
@@ -112,6 +144,9 @@ class MainWindow(QMainWindow):
         for s in (slider, self.offdesign_tab.slider.slider):
             s.sliderPressed.connect(lambda: self.state.set_dragging(True))
             s.sliderReleased.connect(lambda: self.state.set_dragging(False))
+        # a whole Mach-slider drag is one undo step
+        slider.sliderPressed.connect(lambda: self.undo.begin_gesture("mach"))
+        slider.sliderReleased.connect(self.undo.end_gesture)
         for canvas in self.canvases():
             canvas.selection_changed.connect(
                 lambda *sel, c=canvas: self._on_selection(c, *sel))
@@ -168,6 +203,7 @@ class MainWindow(QMainWindow):
         self.zoom_out_action.setToolTip(tip("toolbar.zoom_out"))
         self.zoom_out_action.triggered.connect(lambda: self.current_canvas().zoom_out())
         self.fit_action = QAction(theme.icon("maximize", "text"), "Fit drawing (F)", self)
+        self.fit_action.setShortcut(QKeySequence("F"))
         self.fit_action.triggered.connect(lambda: self.current_canvas().fit())
         self.fit_action.setToolTip(tip("toolbar.fit"))
         for action in (self.zoom_in_action, self.zoom_out_action, self.fit_action):
@@ -192,6 +228,7 @@ class MainWindow(QMainWindow):
 
         bar.addSeparator()
         self.explain_action = QAction("Explain", self)
+        self.explain_action.setShortcut(QKeySequence("E"))
         self.explain_action.setCheckable(True)
         self.explain_action.setToolTip(tip("toolbar.explain"))
         self.explain_action.toggled.connect(self._toggle_explain)
@@ -202,6 +239,7 @@ class MainWindow(QMainWindow):
         button.setDefaultAction(self.explain_action)
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         bar.addWidget(button)
+        self.explain_button = button
 
     def canvases(self):
         return (self.canvas, self.offdesign_tab.canvas)
@@ -259,6 +297,56 @@ class MainWindow(QMainWindow):
     def _stop_warm(self):
         self._warm_timer.stop()
         _warm.cancel()
+
+    def _build_shortcuts(self, help_menu):
+        """Window-level keys (they do not fire while a text field has focus: QLineEdit
+        takes printable keys and its own undo/redo first)."""
+        from .views.shortcuts_overlay import ShortcutsOverlay
+
+        self.shortcuts_overlay = ShortcutsOverlay(self)
+        from .views.tour import TourOverlay
+
+        self.tour = TourOverlay(self)
+        self.tour_action = help_menu.addAction("Show &tour")
+        self.tour_action.triggered.connect(self.tour.start)
+        self.shortcuts_action = help_menu.addAction("&Keyboard shortcuts")
+        self.shortcuts_action.setShortcuts([QKeySequence("?"), QKeySequence("Shift+?")])
+        self.shortcuts_action.triggered.connect(self.shortcuts_overlay.open)
+        help_menu.addSeparator()
+        self.addAction(self.shortcuts_action)
+        self.play_action = QAction("Play / pause sweep", self)
+        self.play_action.setShortcut(QKeySequence("Space"))
+        self.play_action.triggered.connect(self.toggle_play)     # wired up in M8
+        # disabled until M8: an enabled Space shortcut would take Space away from focused
+        # buttons and checkboxes (keyboard activation)
+        self.play_action.setEnabled(False)
+        self.addAction(self.play_action)
+        self.tab_actions = []
+        for k in range(4):
+            action = QAction(f"Tab {k + 1}", self)
+            action.setShortcut(QKeySequence(str(k + 1)))
+            action.triggered.connect(lambda *_, i=k: self.tabs.setCurrentIndex(i))
+            self.addAction(action)
+            self.tab_actions.append(action)
+        for action in (self.fit_action, self.explain_action):
+            self.addAction(action)
+
+    def toggle_play(self):
+        """Space: play / pause the off-design Mach sweep (M8). Nothing yet."""
+        self.play_requests = getattr(self, "play_requests", 0) + 1
+
+    def _build_edit_menu(self):
+        menu = self.menuBar().addMenu("&Edit")
+        self.edit_menu = menu
+        self.undo_action = self.undo.stack.createUndoAction(self, "Undo")
+        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        self.redo_action = self.undo.stack.createRedoAction(self, "Redo")
+        self.redo_action.setShortcuts([QKeySequence("Ctrl+Shift+Z"),
+                                       QKeySequence.StandardKey.Redo])
+        menu.addAction(self.undo_action)
+        menu.addAction(self.redo_action)
+        self.addAction(self.undo_action)
+        self.addAction(self.redo_action)
 
     def show_about(self):
         from .views.about_dialog import AboutDialog
@@ -361,14 +449,26 @@ def main(argv=None):
     import multiprocessing
 
     multiprocessing.freeze_support()          # equation render process in a frozen build
+    from .explain.mathsvg import prune_cache
+
+    prune_cache()                             # equation cache: drop old files, cap the size
     setup_high_dpi()
     args = sys.argv[1:] if argv is None else list(argv)
     app = QApplication.instance() or QApplication(["busemann", *args])
     setup_application(app)
-    window = MainWindow()
+    window = MainWindow()                   # hidden while the welcome window is up
     window.resize(1440, 900)
-    window.show()
     paths = [a for a in args if not a.startswith("-")]
-    if paths:
+    if paths:                               # a file on the command line skips the welcome
+        window.show()
         window.project.open_later(paths[0])
+        return app.exec()
+    from .views.welcome_dialog import WelcomeDialog, apply_choice
+
+    welcome = WelcomeDialog()
+    welcome.exec()
+    apply_choice(window, welcome.choice)
+    window.show()
+    if welcome.tour_check.isChecked():      # checked by default on the first launch only
+        QTimer.singleShot(300, window.tour.start)
     return app.exec()

@@ -38,7 +38,7 @@ class DesignPanel(QWidget):
         self.angle_labels = []
         for k in range(MAX_RAMPS):
             field = NumberField(DEFAULT_CUSTOM_ANGLE, decimals=2, minimum=0.0, maximum=60.0,
-                                min_exclusive=True, unit="°")
+                                min_exclusive=True, unit="°", quantity="angle")
             attach(field, "field.custom_angle")
             label = field_label(f"θ{k + 1}", "field.custom_angle")
             custom_form.addRow(label, field)
@@ -51,16 +51,17 @@ class DesignPanel(QWidget):
         self.custom_error.setWordWrap(True)
         self.custom_error.hide()
 
-        self.capture = NumberField(i.capture_height_m, minimum=0.0, min_exclusive=True)
+        self.capture = NumberField(i.capture_height_m, minimum=0.0, min_exclusive=True,
+                                   quantity="length")
         attach(self.capture, "field.capture_height")
 
         # Advanced: optional limit on the cowl angle of the Oswatitsch optimum (off by default).
         self.max_cowl_check = QCheckBox("Max cowl angle")
         self.max_cowl_check.setToolTip(tip("design.max_cowl"))
         self.max_cowl = NumberField(i.max_cowl_deg, decimals=1, minimum=0.0, maximum=90.0,
-                                    min_exclusive=True, unit="°")
+                                    min_exclusive=True, unit="°", quantity="angle")
         self.wedge = NumberField(i.cowl_wedge_deg, decimals=1, minimum=0.0, maximum=30.0,
-                                 unit="°")
+                                 unit="°", quantity="angle")
         attach(self.wedge, "field.wedge")
         attach(self.max_cowl, "field.max_cowl")
         advanced_box = QWidget()

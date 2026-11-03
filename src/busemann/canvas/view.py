@@ -420,6 +420,13 @@ class InletCanvas(QGraphicsView):
         self.fit()
         event.accept()
 
+    def event(self, event):
+        # Space pans the canvas while it has focus (before the window's Space shortcut)
+        if event.type() == event.Type.ShortcutOverride and event.key() == Qt.Key.Key_Space:
+            event.accept()
+            return True
+        return super().event(event)
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F:
             self.fit()

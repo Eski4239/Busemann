@@ -44,3 +44,28 @@ def test_tex_to_svg_stores_and_reuses_files(tmp_path, monkeypatch):
     mathsvg.clear_memory()
     assert mathsvg.tex_to_svg(r"M_{n1} = M_1 \sin\beta") == svg
     assert mathsvg.render_count == n + 1                   # second time from disk
+
+
+def test_prune_cache_drops_old_files_then_caps_size(tmp_path):
+    import os
+    import time
+
+    now = time.time()
+    day = 86400.0
+
+    def make(name, age_days, size):
+        p = tmp_path / name
+        p.write_bytes(b"x" * size)
+        os.utime(p, (now - age_days * day, now - age_days * day))
+        return p
+
+    old = make("old.svg", 61, 10)
+    stale_tmp = make("old.tmp", 90, 10)
+    keep = [make(f"k{i}.svg", 10 - i, 400) for i in range(5)]   # k0 oldest ... k4 newest
+    other = make("notes.txt", 365, 10)                           # not a cache file
+    removed = mathsvg.prune_cache(tmp_path, max_age_days=60, max_bytes=1000, now=now)
+    assert not old.exists() and not stale_tmp.exists() and other.exists()
+    assert [p.exists() for p in keep] == [False, False, False, True, True]   # oldest first
+    assert removed == 5
+    assert mathsvg.prune_cache(tmp_path / "missing", now=now) == 0
+    assert mathsvg.prune_cache(tmp_path, now=now) == 0                       # within limits

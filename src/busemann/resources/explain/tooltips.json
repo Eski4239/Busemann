@@ -126,5 +126,19 @@
   "toolbar.layer": "Show or hide this layer on both canvases.",
   "toolbar.explain": "Open the Explain drawer: equations, this case's numbers and a plain-language note for the selected item.",
   "drawer.close": "Close the Explain drawer.",
-  "flight.advanced": "Gas properties: the ratio of specific heats γ."
+  "flight.advanced": "Gas properties: the ratio of specific heats γ.",
+  "overlay.shortcuts": "Keyboard shortcuts of the main window; they are off while a text field has focus.",
+  "placeholder.analytics": "Analytics tab: trade studies, drag and buzz estimates arrive in milestone M9.",
+  "placeholder.compare": "Compare tab: side-by-side design comparison arrives in milestone M10.",
+  "tour.card": "Short tour of the main window; Skip ends it and it does not show again.",
+  "section.welcome_new": "Start a new design from a flight-condition preset or the default inputs.",
+  "section.welcome_recent": "Projects you opened or saved recently, with design Mach, ramps and date.",
+  "section.welcome_examples": "Example projects shipped with Busemann; they open as untitled copies.",
+  "welcome.preset": "Start a new untitled design with this flight condition.",
+  "welcome.open": "Open a Busemann project file (.busemann).",
+  "welcome.recent": "Double-click or click a recent project to open it.",
+  "welcome.example": "Open an example as an untitled copy (the original is never overwritten).",
+  "welcome.tour": "Show a three-step tour of the main window after this window closes.",
+  "welcome.hint": "Esc opens the main window with the default design.",
+  "welcome.title": "Busemann, a design lab for external-compression supersonic inlets."
 }

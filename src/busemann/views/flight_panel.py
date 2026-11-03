@@ -52,9 +52,9 @@ class FlightPanel(QWidget):
             [("altitude", "Altitude"), ("manual", "Manual p, T")], i.atmosphere_mode
         )
         self.mode.setToolTip(tip("flight.mode"))
-        self.altitude = NumberField(0.0)
-        self.pressure = NumberField(0.0, min_exclusive=True)
-        self.temperature = NumberField(0.0, min_exclusive=True)
+        self.altitude = NumberField(0.0, quantity="altitude")
+        self.pressure = NumberField(0.0, min_exclusive=True, quantity="pressure")
+        self.temperature = NumberField(0.0, min_exclusive=True, quantity="temperature")
         attach(self.altitude, "field.altitude")
         attach(self.pressure, "field.p_inf")
         attach(self.temperature, "field.t_inf")
@@ -70,7 +70,8 @@ class FlightPanel(QWidget):
         gamma_box = QWidget()
         gamma_form = _form(gamma_box)
         self.gamma = NumberField(i.gamma, decimals=3, minimum=GAMMA_RANGE[0],
-                                 maximum=GAMMA_RANGE[1], min_exclusive=True)
+                                 maximum=GAMMA_RANGE[1], min_exclusive=True,
+                                 quantity="dimensionless")
         attach(self.gamma, "field.gamma")
         gamma_form.addRow(field_label("γ (cp/cv)", "label.gamma"), self.gamma)
         self.advanced = CollapsibleSection("Advanced", gamma_box, collapsed=True,

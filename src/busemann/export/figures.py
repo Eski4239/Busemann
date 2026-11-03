@@ -21,6 +21,14 @@ from ..theme import tokens
 
 C = tokens.COLORS
 PNG_DPI = 300
+PAD_IN = 0.06            # fixed margin around the tight bounding box, inches
+# line weights: the canvas uses cosmetic pens in screen px; 1 px = 0.75 pt
+PX_TO_PT = 0.75
+LW = {"wall": 2.0 * PX_TO_PT, "cowl": 1.5 * PX_TO_PT, "shock": 2.0 * PX_TO_PT,
+      "region": 1.0 * PX_TO_PT, "streamtube": 1.0 * PX_TO_PT, "arrow": 1.5 * PX_TO_PT}
+DASH = (0, (4, 2))       # Qt DashLine (4 on, 2 off, in pen widths)
+DOT = (0, (1, 2))        # Qt DotLine
+HATCH = "////"           # 45-degree hatching, spacing matched by eye to Qt BDiagPattern
 FORMATS = ("png", "svg", "pdf")
 RC = {
     "font.family": ["Inter", "DejaVu Sans"],
@@ -33,6 +41,8 @@ RC = {
     "ytick.color": C["text_muted"],
     "figure.facecolor": "white",
     "axes.facecolor": "white",
+    "hatch.linewidth": 0.75,
+    "hatch.color": C["wall"],
 }
 _fonts_registered = False
 
@@ -73,32 +83,42 @@ def canvas_figure(picture, title=None, width_in=7.0):
         for region in picture.regions:
             fill = fills[P.bin_index(region.state.M, edges)]
             ax.add_patch(Polygon(region.polygon, closed=True, facecolor=fill,
-                                 edgecolor=_colors.darker(fill), linewidth=0.6, zorder=1,
-                                 gid=f"region-{region.index}"))
-        for body, gid in ((picture.ramp_body, "ramp"), (picture.cowl_body, "cowl")):
-            ax.add_patch(Polygon(body, closed=True, facecolor="white", edgecolor=C["wall"],
-                                 hatch="////", linewidth=1.2, zorder=3, gid=gid))
+                                 edgecolor=_colors.darker(fill), linewidth=LW["region"],
+                                 zorder=1, gid=f"region-{region.index}"))
+        # walls exactly as on the canvas: the ramp is a hatch-only band under a solid wall
+        # line (no outline), the cowl a hatched wedge with an outline
+        ax.add_patch(Polygon(picture.ramp_body, closed=True, facecolor="none",
+                             edgecolor=C["wall"], hatch=HATCH, linewidth=0.0, zorder=3,
+                             gid="ramp"))
+        ax.add_patch(Polygon(picture.cowl_body, closed=True, facecolor="none",
+                             edgecolor=C["wall"], hatch=HATCH, linewidth=LW["cowl"], zorder=3,
+                             gid="cowl"))
         xs, ys = zip(*picture.ramp_surface)
-        ax.plot(xs, ys, color=C["wall"], linewidth=1.5, zorder=4)
+        ax.plot(xs, ys, color=C["wall"], linewidth=LW["wall"], zorder=4, gid="ramp-surface",
+                solid_capstyle="round", solid_joinstyle="round")
         for shock in picture.shocks:
             ax.plot([shock.start[0], shock.end[0]], [shock.start[1], shock.end[1]],
-                    color=C["shock"], linewidth=1.6, zorder=5, gid=f"shock-{shock.index}",
-                    linestyle=(0, (4, 3)) if shock.kind == "normal" else "-")
+                    color=C["shock"], linewidth=LW["shock"], zorder=5,
+                    gid=f"shock-{shock.index}", solid_capstyle="round",
+                    linestyle=DASH if shock.kind == "normal" else "-")
         if picture.bow_shock:
             xs, ys = zip(*picture.bow_shock)
-            ax.plot(xs, ys, color=C["shock"], linewidth=1.6, linestyle=(0, (4, 3)), zorder=5,
+            ax.plot(xs, ys, color=C["shock"], linewidth=LW["shock"], linestyle=DASH, zorder=5,
                     gid="bow-shock")
         if len(picture.streamtube) > 1:
             xs, ys = zip(*picture.streamtube)
-            ax.plot(xs, ys, color=C["text_muted"], linewidth=1.0, linestyle=":", zorder=4)
+            ax.plot(xs, ys, color=C["text_muted"], linewidth=LW["streamtube"], linestyle=DOT,
+                    zorder=4, gid="streamtube")
         if picture.arrow:
             (tx, ty), (hx, hy) = picture.arrow
             ax.annotate("", xy=(hx, hy), xytext=(tx, ty), zorder=6,
-                        arrowprops=dict(arrowstyle="-|>", color=C["text"], lw=1.4))
+                        arrowprops=dict(arrowstyle="-|>,head_length=0.9,head_width=0.35",
+                                        color=C["text"], lw=LW["arrow"], mutation_scale=12))
             ax.text(0.5 * (tx + hx), ty + 0.1 * h, f"M∞ = {picture.skeleton.mach:.2f}",
                     ha="center", va="bottom", color=C["text"], fontsize=9, zorder=6,
+                    fontfamily=["JetBrains Mono", "DejaVu Sans Mono"],
                     bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="none", alpha=0.85))
-        _mach_legend(fig, edges, fills)
+        fig.legend_labels = _mach_legend(fig, edges, fills)
         if title:
             fig.text(0.02, 0.97, title, ha="left", va="top", fontsize=10, color=C["text"],
                      fontweight="semibold")
@@ -107,23 +127,33 @@ def canvas_figure(picture, title=None, width_in=7.0):
         return fig
 
 
+def class_label(lo, hi):
+    """Mach class label: '2.5–2.55'."""
+    return f"{lo:g}–{hi:g}"
+
+
 def _mach_legend(fig, edges, fills):
-    lax = fig.add_axes((0.87, 0.2, 0.03, 0.6))
+    """Discrete classes: one equal-height block per Mach bin, labelled with its range (not a
+    continuous scale), highest Mach on top; a dark line marks the sonic boundary."""
+    lax = fig.add_axes((0.86, 0.2, 0.03, 0.6))
+    labels = []
     for i, fill in enumerate(fills):
         lax.add_patch(Rectangle((0, i), 1, 1, facecolor=fill, edgecolor=_colors.darker(fill),
-                                linewidth=0.5))
+                                linewidth=LW["region"]))
+        labels.append(class_label(edges[i], edges[i + 1]))
     lax.set_xlim(0, 1)
     lax.set_ylim(0, len(fills))
     lax.set_xticks([])
-    lax.set_yticks(range(len(edges)))
-    lax.set_yticklabels([f"{e:g}" for e in edges], fontsize=7)
+    lax.set_yticks([i + 0.5 for i in range(len(fills))])
+    lax.set_yticklabels(labels, fontsize=7)
+    lax.tick_params(axis="y", length=0, pad=4)
     lax.yaxis.tick_right()
     if 1.0 in edges:
-        k = edges.index(1.0)
-        lax.axhline(k, color=C["text"], linewidth=1.2)
+        lax.axhline(edges.index(1.0), color=C["text"], linewidth=LW["wall"])
     lax.set_title("Mach", fontsize=8, color=C["text_muted"], pad=4)
     for side in lax.spines.values():
         side.set_visible(False)
+    return labels
 
 
 # --- off-design charts ---------------------------------------------------------------------
@@ -207,5 +237,5 @@ def save_figure(fig, path, metadata=None):
         info = {"Creator": creator, "Description": summary, "Title": path.stem}
     with matplotlib.rc_context(RC):
         fig.savefig(path, format=fmt, dpi=PNG_DPI if fmt == "png" else None, metadata=info,
-                    facecolor="white")
+                    facecolor="white", bbox_inches="tight", pad_inches=PAD_IN)
     return path

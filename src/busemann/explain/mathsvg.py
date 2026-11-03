@@ -125,6 +125,51 @@ def render_to_files(texs, color, size_pt, directory):
     return rendered, longest
 
 
+CACHE_MAX_AGE_DAYS = 60
+CACHE_MAX_BYTES = 50 * 2**20
+
+
+def prune_cache(directory=None, max_age_days=CACHE_MAX_AGE_DAYS, max_bytes=CACHE_MAX_BYTES,
+                now=None):
+    """Start-up housekeeping: delete cache files older than max_age_days, then the oldest
+    files until the folder is at most max_bytes. Returns the number of files removed.
+    Errors are ignored (the cache is an optimisation)."""
+    directory = Path(directory or cache_dir())
+    now = time.time() if now is None else now
+    try:
+        files = []
+        for p in directory.iterdir():
+            if p.suffix in (".svg", ".tmp") and p.is_file():
+                st = p.stat()
+                files.append((st.st_mtime, st.st_size, p))
+    except OSError:
+        return 0
+    removed = 0
+    keep = []
+    for mtime, size, p in files:
+        if now - mtime > max_age_days * 86400.0:
+            removed += _unlink(p)
+        else:
+            keep.append((mtime, size, p))
+    keep.sort()                                   # oldest first
+    total = sum(size for _, size, _ in keep)
+    for mtime, size, p in keep:
+        if total <= max_bytes:
+            break
+        if _unlink(p):
+            removed += 1
+            total -= size
+    return removed
+
+
+def _unlink(path):
+    try:
+        path.unlink()
+        return 1
+    except OSError:
+        return 0
+
+
 def clear_memory():
     _memory.clear()
 
