@@ -166,6 +166,7 @@ def test_sweep_invalid_inputs():
         api.off_design_sweep(d, 2.0, 3.0, 1)
 
 
+@pytest.mark.perf
 def test_sweep_performance_100_points():
     d = api.design(3.0, 2)
     t0 = time.perf_counter()

@@ -12,6 +12,7 @@ from inletdesign import units as _units
 
 from ..theme import qt as theme
 from ..theme import tokens
+from . import colors as _colors
 from . import picture as P
 
 LAYERS = ("regions", "walls", "shocks", "streamtube", "dimensions", "annotations", "selection")
@@ -47,26 +48,9 @@ def pen(name, width=1.0, style=Qt.PenStyle.SolidLine, alpha=None):
     return p
 
 
-def _mix(a, b, f):
-    a, b = QColor(a), QColor(b)
-    return QColor.fromRgbF(a.redF() + (b.redF() - a.redF()) * f,
-                           a.greenF() + (b.greenF() - a.greenF()) * f,
-                           a.blueF() + (b.blueF() - a.blueF()) * f)
-
-
 def bin_colors(edges):
-    """One colour per Mach bin: sand below M = 1 (lightest next to sonic), blues above."""
-    sub = [i for i in range(len(edges) - 1) if edges[i + 1] <= 1.0 + 1e-12]
-    sup = [i for i in range(len(edges) - 1) if i not in sub]
-    out = [None] * (len(edges) - 1)
-    for rank, i in enumerate(reversed(sub)):            # rank 0 = just below M = 1
-        out[i] = QColor(tokens.MACH_SUBSONIC[min(rank, len(tokens.MACH_SUBSONIC) - 1)])
-    stops = tokens.MACH_SUPERSONIC
-    for rank, i in enumerate(sup):
-        x = (rank / (len(sup) - 1) if len(sup) > 1 else 0.0) * (len(stops) - 1)
-        k = min(int(x), len(stops) - 2)
-        out[i] = _mix(stops[k], stops[k + 1], x - k)
-    return out
+    """One QColor per Mach bin (see canvas.colors, shared with the figure export)."""
+    return [QColor(c) for c in _colors.bin_colors(edges)]
 
 
 def length_text(metres, system):
@@ -220,7 +204,7 @@ class InletScene(QGraphicsScene):
             fill = QColor(self.mach_colors[P.bin_index(region.state.M, self.mach_edges)])
             item.setPolygon(_poly(region.polygon))
             item.setBrush(QBrush(fill))
-            border = QPen(fill.darker(tokens.REGION_BORDER_DARKER), 1.0)
+            border = QPen(QColor(_colors.darker(fill.name())), 1.0)
             border.setCosmetic(True)
             border.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
             item.setPen(border)

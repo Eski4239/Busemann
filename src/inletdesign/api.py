@@ -414,6 +414,11 @@ def _wedge(design_result):
     return design_result.inputs.cowl_wedge_deg or 0.0
 
 
+def inlet_geometry(design_result):
+    """The core InletGeometry of a design (for the DXF / CFD-domain exporters)."""
+    return _geometry_of(design_result)
+
+
 def _geometry_of(design_result):
     i = design_result.inputs
     return build_geometry(i.M, list(design_result.ramp_angles_deg), i.capture_height,

@@ -31,6 +31,11 @@ busemann = [
     "resources/fonts/*.ttf",
     "resources/fonts/*.txt",
     "resources/icons/*.svg",
+    "resources/data/*.json",
+    "resources/explain/*.md",
+    "resources/explain/*.json",
+    "resources/licenses/*.txt",
+    "resources/licenses/*.json",
 ]
 
 [tool.pytest.ini_options]

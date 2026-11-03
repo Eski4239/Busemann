@@ -55,6 +55,8 @@ def panel_overflow(window):
                  "min_hint": [need, 0]}
                 for c, need, have in window.results_panel.station_table.column_overflow()]
     for panel in (window.left_panel, window.right_panel):
+        if not panel.isVisible():
+            continue
         body = panel.widget()
         if body.minimumSizeHint().width() > panel.viewport().width() + 1:
             problems.append({"widget": "panel body", "name": panel.objectName(),
@@ -83,8 +85,14 @@ def main():
                  for p in clipped_widgets(window) + panel_overflow(window)]
     result = {"dpr": window.devicePixelRatioF(), "size": [window.width(), window.height()],
               "problems": problems}
+    window.explain_action.setChecked(True)                     # drawer open: narrow centre
+    settle()
+    problems += [dict(p, tab="Off-design + Explain")
+                 for p in clipped_widgets(window) + panel_overflow(window)]
     if len(sys.argv) > 2:
         window.grab().save(sys.argv[2])
+    window.explain_action.setChecked(False)
+    settle(400)
     window.tabs.setCurrentWidget(window.canvas)
     settle(200)
     if len(sys.argv) > 1:

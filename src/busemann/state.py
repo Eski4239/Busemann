@@ -11,37 +11,17 @@ Only the newest request's result is used (generation counters, stale results dro
 """
 import dataclasses
 import time
-from dataclasses import dataclass
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 
 from inletdesign import api
 
+from .inputs import Inputs, preset_changes  # noqa: F401  (re-exported)
 from .theme import tokens
 
 OFF_DESIGN_MIN_MACH = 1.2        # off-design slider lower end
 OFF_DESIGN_SPAN = 1.5            # slider upper end = design Mach + this
 SWEEP_POINTS = 40
-
-
-@dataclass(frozen=True)
-class Inputs:
-    mach: float = 3.0
-    atmosphere_mode: str = "altitude"   # "altitude" | "manual"
-    altitude_m: float = 20000.0
-    p_pa: float = 10000.0
-    T_k: float = 220.0
-    gamma: float = 1.4
-    n_ramps: int = 2
-    method: str = "oswatitsch"          # "oswatitsch" | "custom"
-    custom_angles: tuple = ()
-    capture_height_m: float = 0.1
-    units: str = "SI"                   # "SI" | "Imperial"
-    preset: str = None                  # name of the applied preset, None once edited
-    off_design_mach: float = None       # off-design slider Mach; None = the design Mach
-    max_cowl_enabled: bool = False      # limit the Oswatitsch optimum's cowl angle
-    max_cowl_deg: float = 30.0
-    cowl_wedge_deg: float = 0.0         # cowl lip outer wedge; 0 = zero-thickness idealisation
 
 
 # Fields that do not change any computed result.
@@ -126,6 +106,7 @@ class AppState(QObject):
     design_ready = Signal(object, object)      # DesignResult|None, error|None
     off_design_ready = Signal(object, object)  # OffDesignResult|None, error|None
     view_changed = Signal(str)                 # "design" | "offdesign"
+    dragging_changed = Signal(bool)            # a Mach slider is being dragged
     busy_changed = Signal(bool)
     compute_time_changed = Signal(float)       # ms, freestream + design of the last result
 
@@ -145,6 +126,7 @@ class AppState(QObject):
         self.compute_cached = False      # last design came from the api cache
         self.off_freestream = None       # freestream at the off-design Mach
         self.active_view = "design"
+        self.dragging = False
         self._fs_ms = 0.0
         self._generation = 0
         self._off_generation = 0
@@ -189,11 +171,25 @@ class AppState(QObject):
         else:
             self._timer.start()
 
+    def load_inputs(self, inputs):
+        """Replace every input at once (project open / New) and recompute everything."""
+        self._timer.stop()
+        self._off_timer.stop()
+        self._inputs = inputs
+        self.inputs_changed.emit(inputs)
+        self.recompute_now()
+
     def off_design_mach(self):
         """Mach the off-design view evaluates: the slider value, or the design Mach."""
         if self._inputs.off_design_mach is not None:
             return self._inputs.off_design_mach
         return self.design.inputs.M if self.design is not None else self._inputs.mach
+
+    def set_dragging(self, dragging):
+        """A Mach slider drag starts/ends (expensive views wait for the end)."""
+        if dragging != self.dragging:
+            self.dragging = dragging
+            self.dragging_changed.emit(dragging)
 
     def set_active_view(self, view):
         if view != self.active_view:

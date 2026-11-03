@@ -1,13 +1,13 @@
 # Terminal normal shock
 
 ## Relations
-<!-- SOURCE: NACA Report 1135 (1953), eq. (93), p. 619 (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (93), p. 619 -->
 $$ \frac{p_2}{p_1} = \frac{2\gamma M_1^2 - (\gamma - 1)}{\gamma + 1} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (95), p. 619 (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (95), p. 619 -->
 $$ \frac{T_2}{T_1} = \frac{\left[2\gamma M_1^2 - (\gamma - 1)\right]\left[(\gamma - 1) M_1^2 + 2\right]}{(\gamma + 1)^2 M_1^2} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (96), p. 619 (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (96), p. 619 -->
 $$ M_2^2 = \frac{(\gamma - 1) M_1^2 + 2}{2\gamma M_1^2 - (\gamma - 1)} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (99), p. 619 (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (99), p. 619 -->
 $$ \frac{p_{02}}{p_{01}} = \left[\frac{(\gamma + 1) M_1^2}{(\gamma - 1) M_1^2 + 2}\right]^{\frac{\gamma}{\gamma - 1}} \left[\frac{\gamma + 1}{2\gamma M_1^2 - (\gamma - 1)}\right]^{\frac{1}{\gamma - 1}} $$
 
 ## This case

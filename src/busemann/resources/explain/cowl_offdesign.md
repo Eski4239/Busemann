@@ -3,13 +3,13 @@
 ## Relations
 <!-- SOURCE: definition used by this tool: the flow reaching the lip is the region containing the lip; its direction phi_lip is already turned by the ramp shocks it has crossed -->
 $$ \theta_\mathrm{req} = \max(0,\;\theta_\mathrm{cowl} - \varphi_\mathrm{lip}) + \delta_\mathrm{wedge} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (168), p. 624, with theta_max from eq. (139a), p. 621, evaluated at the lip Mach (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (168), p. 624, with theta_max from eq. (139a), p. 621, evaluated at the lip Mach -->
 $$ \mathrm{margin} = \theta_\mathrm{max}(M_\mathrm{lip}) - \theta_\mathrm{req} $$
 
 ## This case
 The lip lies in region {{off.cowl_lip_region}} (0 = freestream), where M = {{off.lip_mach:.4f}} and the flow direction is {{off.lip_flow_angle_deg:.2f}}°.
-$$ \theta_\mathrm{req} = \max(0,\;{{design.cowl_angle_deg:.2f}}^\circ - {{off.lip_flow_angle_deg:.2f}}^\circ) + {{off.cowl_wedge_deg:.2f}}^\circ = {{off.cowl_required_turn_deg:.2f}}^\circ $$
-@if off.cowl_margin_deg != None: $$ \mathrm{margin} = {{off.theta_max_lip_deg:.2f}}^\circ - {{off.cowl_required_turn_deg:.2f}}^\circ = {{off.cowl_margin_deg:+.2f}}^\circ $$
+$$ \theta_\mathrm{req} = \max(0,\;{{design.cowl_angle_deg:.2f}}\degree - {{off.lip_flow_angle_deg:.2f}}\degree) + {{off.cowl_wedge_deg:.2f}}\degree = {{off.cowl_required_turn_deg:.2f}}\degree $$
+@if off.cowl_margin_deg != None: $$ \mathrm{margin} = {{off.theta_max_lip_deg:.2f}}\degree - {{off.cowl_required_turn_deg:.2f}}\degree = {{off.cowl_margin_deg:+.2f}}\degree $$
 @if off.cowl_margin_deg == None: The flow at the lip is subsonic (M = {{off.lip_mach:.4f}}): no shock forms there, so there is no margin to compute.
 
 ## In plain words

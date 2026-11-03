@@ -8,6 +8,7 @@ from ..theme import tokens
 from ..widgets import (
     CollapsibleSection, LabeledSlider, NumberField, SegmentedControl, field_label, section_title,
 )
+from ..inputs import preset_changes
 from .readout import Readout
 from ..tooltips import attach, tip
 
@@ -140,13 +141,7 @@ class FlightPanel(QWidget):
         if name == CUSTOM:
             self.state.update(preset=None)
             return
-        p = _presets.get(name)
-        changes = dict(mach=p.mach, atmosphere_mode=p.mode, preset=p.name)
-        if p.mode == "altitude":
-            changes["altitude_m"] = p.altitude_m
-        else:
-            changes.update(p_pa=p.p_pa, T_k=p.T_k)
-        self.state.update(**changes)
+        self.state.update(**preset_changes(name))
 
     def _set_field(self, field, value_si, quantity, system, minimum_si=None, maximum_si=None):
         field.set_decimals(_DECIMALS[quantity][system])

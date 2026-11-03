@@ -1,10 +1,11 @@
 """QApplication setup and the main window (spec 5 layout: left 300 | canvas | right 320)."""
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEasingCurve, Qt, QTimer, QVariantAnimation
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QScrollArea, QTabWidget,
+    QApplication, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QScrollArea, QStackedWidget,
+    QTabWidget,
     QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 
@@ -14,9 +15,12 @@ from .canvas import InletCanvas
 from .state import AppState
 from .theme import tokens
 from .views import DesignPanel, FlightPanel, ResultsPanel
+from .explain import warm as _warm
 from .tooltips import tip
-from .views.explain_drawer import ExplainDrawer
+from .views.explain_drawer import DRAWER_W, SLIDE_MS, ExplainDrawer
 from .views.offdesign_tab import OffDesignTab
+from .views.export_controller import ExportController
+from .views.project_controller import ProjectController
 from .widgets import divider
 
 
@@ -40,9 +44,13 @@ def _side_panel(object_name, width, *widgets):
     return scroll
 
 
+WARM_DELAY_MS = 1500        # idle time after a design before warming the equation cache
+
+
 class MainWindow(QMainWindow):
     def __init__(self, state=None, parent=None):
         super().__init__(parent)
+        self.warm_futures = []
         self.state = state or AppState(parent=self)
         self.setWindowTitle("Busemann")
         self.setWindowIcon(theme.icon("busemann", "accent", 64))
@@ -54,6 +62,21 @@ class MainWindow(QMainWindow):
         self.left_panel = _side_panel("leftPanel", tokens.LEFT_PANEL_WIDTH,
                                       self.flight_panel, self.design_panel)
         self.right_panel = _side_panel("rightPanel", tokens.RIGHT_PANEL_WIDTH, self.results_panel)
+        # Right column: results, or the Explain drawer (column widens, centre shrinks).
+        self.right_panel.setMinimumWidth(0)
+        self.right_panel.setMaximumWidth(16777215)
+        self.right_column = QStackedWidget()
+        self.right_column.setObjectName("rightColumn")
+        self.right_column.setFixedWidth(tokens.RIGHT_PANEL_WIDTH)
+        self.right_column.addWidget(self.right_panel)
+        self.explain_drawer = ExplainDrawer(self.state, self.right_column)
+        self.right_column.addWidget(self.explain_drawer)
+        self._column_anim = QVariantAnimation(self)
+        self._column_anim.setDuration(SLIDE_MS)
+        self._column_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._column_anim.valueChanged.connect(
+            lambda w: self.right_column.setFixedWidth(round(w)))
+        self._column_anim.finished.connect(self._on_column_anim_done)
 
         self.canvas = InletCanvas(self.state)
         self.tabs = QTabWidget()
@@ -70,23 +93,45 @@ class MainWindow(QMainWindow):
         row.setSpacing(0)
         row.addWidget(self.left_panel)
         row.addWidget(self.tabs, 1)
-        row.addWidget(self.right_panel)
+        row.addWidget(self.right_column)
         self.setCentralWidget(centre)
 
-        self.explain_drawer = ExplainDrawer(self.state, self)
         self._build_toolbar()
         self._build_status_bar()
+        self.project = ProjectController(self)
+        self.exports = ExportController(self, self.project.export_menu)
+        help_menu = self.menuBar().addMenu("&Help")
+        self.about_action = help_menu.addAction("&About Busemann…")
+        self.about_action.triggered.connect(self.show_about)
+        self.setAcceptDrops(True)
 
         # Transitions animate on discrete changes, not while the Mach slider is dragged.
         slider = self.flight_panel.mach.slider
         slider.sliderPressed.connect(lambda: self.canvas.set_animations_enabled(False))
         slider.sliderReleased.connect(lambda: self.canvas.set_animations_enabled(True))
+        for s in (slider, self.offdesign_tab.slider.slider):
+            s.sliderPressed.connect(lambda: self.state.set_dragging(True))
+            s.sliderReleased.connect(lambda: self.state.set_dragging(False))
         for canvas in self.canvases():
             canvas.selection_changed.connect(
                 lambda *sel, c=canvas: self._on_selection(c, *sel))
             canvas.picture_changed.connect(lambda c=canvas: self._on_picture(c))
         self.results_panel.station_table.row_clicked.connect(
             lambda row: self.current_canvas().select("region", row))
+
+        # Fill the equation cache in a separate render process once a design has been idle
+        # for WARM_DELAY_MS (the drawer then opens without rendering); any input change
+        # cancels the queue.
+        self._warm_timer = QTimer(self)
+        self._warm_timer.setSingleShot(True)
+        self._warm_timer.setInterval(WARM_DELAY_MS)
+        self._warm_timer.timeout.connect(self._warm_equations)
+        self.state.design_ready.connect(lambda *_: self._warm_timer.start())
+        # any input change (e.g. a slider drag) stops a running warm-up at once
+        self.state.inputs_changed.connect(lambda *_: self._stop_warm())
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(_warm.shutdown)
 
         self.state.busy_changed.connect(self.busy.setVisible)
         self.state.compute_time_changed.connect(lambda _ms: self._update_status())
@@ -107,7 +152,7 @@ class MainWindow(QMainWindow):
         self.toggle_right.setToolTip(tip("toolbar.toggle_right"))
         self.toggle_right.setShortcut(QKeySequence("Ctrl+]"))
         for action, panel in ((self.toggle_left, self.left_panel),
-                              (self.toggle_right, self.right_panel)):
+                              (self.toggle_right, self.right_column)):
             action.setCheckable(True)
             action.setChecked(True)
             action.toggled.connect(panel.setVisible)
@@ -185,15 +230,45 @@ class MainWindow(QMainWindow):
                 self.explain_drawer.show_item(kind, index)
 
     def _toggle_explain(self, on):
+        """Open: show the drawer in the right column and widen it to DRAWER_W; close: narrow
+        it back, then show the results again (200 ms, the centre column follows)."""
         if on:
             self.explain_drawer.show_item(*self.current_canvas().selection)
+            self.right_column.setCurrentWidget(self.explain_drawer)
             self.explain_drawer.open()
+            target = DRAWER_W
         else:
             self.explain_drawer.close_drawer()
+            target = tokens.RIGHT_PANEL_WIDTH
+        self._column_anim.stop()
+        self._column_anim.setStartValue(float(self.right_column.width()))
+        self._column_anim.setEndValue(float(target))
+        self._column_anim.start()
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.explain_drawer.place()
+    def _on_column_anim_done(self):
+        if not self.explain_drawer.is_open:
+            self.right_column.setCurrentWidget(self.right_panel)
+
+    def _warm_equations(self):
+        s = self.state
+        if s.design is None:
+            return
+        texs = _warm.equations(s.design, s.off_design, s.freestream, s.off_freestream)
+        self.warm_futures = _warm.start(texs, tokens.COLORS["text"])
+
+    def _stop_warm(self):
+        self._warm_timer.stop()
+        _warm.cancel()
+
+    def show_about(self):
+        from .views.about_dialog import AboutDialog
+
+        self.about_dialog = AboutDialog(self)
+        self.about_dialog.open()
+        return self.about_dialog
+
+    def is_column_animating(self):
+        return self._column_anim.state() == QVariantAnimation.State.Running
 
     def _on_picture(self, canvas):
         if canvas is self.current_canvas():
@@ -236,7 +311,33 @@ class MainWindow(QMainWindow):
         self.model_label.setText(f"Ideal gas, γ = {self.state.inputs.gamma:.2f}")
         self.units_label.setText(self.state.inputs.units)
 
+    # --- drag and drop a project file --------------------------------------------------------
+    @staticmethod
+    def _dropped_project(mime):
+        urls = [u for u in mime.urls() if u.isLocalFile()] if mime.hasUrls() else []
+        if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".busemann"):
+            return urls[0].toLocalFile()
+        return None
+
+    def dragEnterEvent(self, event):
+        if self._dropped_project(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        path = self._dropped_project(event.mimeData())
+        if path:
+            event.acceptProposedAction()
+            self.project.open_path(path)
+
     def closeEvent(self, event):
+        if not self.project.maybe_save():
+            event.ignore()
+            return
+        self.project.dirty = False                 # decided: later closes must not ask again
+        self._warm_timer.stop()
+        self._stop_warm()                              # stop a running warm-up
         self.state.shutdown()
         super().closeEvent(event)
 
@@ -256,10 +357,18 @@ def setup_high_dpi():
 
 
 def main(argv=None):
+    """Start the app; `busemann path/to/file.busemann` opens that project."""
+    import multiprocessing
+
+    multiprocessing.freeze_support()          # equation render process in a frozen build
     setup_high_dpi()
-    app = QApplication.instance() or QApplication(sys.argv if argv is None else ["busemann", *argv])
+    args = sys.argv[1:] if argv is None else list(argv)
+    app = QApplication.instance() or QApplication(["busemann", *args])
     setup_application(app)
     window = MainWindow()
     window.resize(1440, 900)
     window.show()
+    paths = [a for a in args if not a.startswith("-")]
+    if paths:
+        window.project.open_later(paths[0])
     return app.exec()

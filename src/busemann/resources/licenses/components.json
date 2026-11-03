@@ -1,0 +1,26 @@
+{
+  "components": [
+    {"name": "PySide6 / Qt", "dist": "PySide6", "license": "LGPL-3.0-only",
+     "metadata_expect": "LGPL-3.0-only", "files": ["LGPL-3.0.txt", "GPL-3.0.txt"],
+     "note": "Qt for Python is offered under LGPLv3 (or GPLv2/GPLv3); Busemann uses it under LGPLv3. LGPLv3 builds on GPLv3, so both texts are included."},
+    {"name": "pyqtgraph", "dist": "pyqtgraph", "license": "MIT",
+     "metadata_expect": "MIT", "files": ["pyqtgraph-MIT.txt"],
+     "note": "The CET colour-map data shipped with pyqtgraph is CC-BY (not used by Busemann)."},
+    {"name": "NumPy", "dist": "numpy", "license": "BSD-3-Clause (with bundled components)",
+     "metadata_expect": "BSD-3-Clause", "files": ["numpy-LICENSE.txt"],
+     "note": "Windows wheels bundle OpenBLAS/LAPACK (BSD-3-Clause) and the GCC runtime (GPL-3.0-or-later WITH GCC-exception-3.1); see the file."},
+    {"name": "SciPy", "dist": "scipy", "license": "BSD-3-Clause (with bundled components)",
+     "metadata_expect": "BSD", "files": ["scipy-LICENSE.txt"],
+     "note": "Windows wheels bundle OpenBLAS/LAPACK and the GCC runtime (GPL-3.0-or-later WITH GCC-exception-3.1); see the file."},
+    {"name": "Matplotlib", "dist": "matplotlib", "license": "Matplotlib License (PSF-based)",
+     "metadata_expect": "Python Software Foundation", "files": ["matplotlib-LICENSE.txt"],
+     "note": ""},
+    {"name": "ezdxf", "dist": "ezdxf", "license": "MIT",
+     "metadata_expect": "MIT", "files": ["ezdxf-MIT.txt"], "note": ""},
+    {"name": "Inter (font)", "dist": null, "license": "SIL OFL 1.1",
+     "metadata_expect": null, "files": ["Inter-OFL.txt"], "note": "Bundled in resources/fonts."},
+    {"name": "JetBrains Mono (font)", "dist": null, "license": "SIL OFL 1.1",
+     "metadata_expect": null, "files": ["JetBrainsMono-OFL.txt"],
+     "note": "Bundled in resources/fonts."}
+  ]
+}

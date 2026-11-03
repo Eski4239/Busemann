@@ -1,0 +1,172 @@
+"""File > Export menu (spec 4.7): geometry DXF, CFD domain DXFs, figures, results.
+
+Every export carries the metadata header (export.metadata). Save dialogs remember the last
+folder and propose names like busemann_M3.00_2ramp_design.png.
+"""
+from pathlib import Path
+
+from PySide6.QtCore import QObject
+from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+from inletdesign import api
+from inletdesign.cfd_domain import export_cfd_domain_dxf, export_offdesign_domain_dxf
+from inletdesign.export import export_dxf
+
+from ..canvas import picture as P
+from ..export import figures as F
+from ..export import results as R
+from ..export.metadata import default_name, metadata
+from ..settings import app_settings
+
+FIGURE_FILTER = "PNG image, 300 dpi (*.png);;SVG vector (*.svg);;PDF document (*.pdf)"
+
+
+class ExportController(QObject):
+    def __init__(self, window, menu):
+        super().__init__(window)
+        self.window = window
+        self.state = window.state
+        self.settings = app_settings()
+        self.actions = {}
+        add = self._add
+        add(menu, "geometry", "Geometry DXF…", self.export_geometry)
+        add(menu, "cfd", "CFD domain DXF (design)…", self.export_cfd)
+        add(menu, "cfd_off", "CFD domain DXF (off-design v2)…", self.export_cfd_offdesign)
+        menu.addSeparator()
+        add(menu, "canvas", "Canvas figure…", self.export_canvas)
+        charts = menu.addMenu("Off-design chart")
+        for kind, label in (("capture", "Capture"), ("recovery", "Recovery"),
+                            ("margin", "Cowl margin")):
+            add(charts, f"chart_{kind}", f"{label}…", lambda k=kind: self.export_chart(k))
+        menu.addSeparator()
+        add(menu, "json", "Results JSON…", self.export_json)
+        add(menu, "csv", "Results CSV…", self.export_csv)
+        menu.aboutToShow.connect(self._update_enabled)
+
+    def _add(self, menu, key, text, slot):
+        action = menu.addAction(text)
+        action.triggered.connect(lambda *_: slot())
+        self.actions[key] = action
+
+    def _update_enabled(self):
+        ok = self.state.design is not None
+        for action in self.actions.values():
+            action.setEnabled(ok)
+        has_ramps = ok and self.state.design.inputs.n_ramps > 0
+        self.actions["cfd_off"].setEnabled(has_ramps)
+        for k in ("capture", "recovery", "margin"):
+            self.actions[f"chart_{k}"].setEnabled(self.state.sweep is not None)
+
+    # --- dialogs ---------------------------------------------------------------------------
+    def ask_path(self, title, name, file_filter):
+        """Save dialog starting in the last export folder (replaced in tests)."""
+        start = str(Path(self.settings.value("export/last_dir", str(Path.home()))) / name)
+        path, _ = QFileDialog.getSaveFileName(self.window, title, start, file_filter)
+        return path or None
+
+    def _path(self, title, name, file_filter):
+        path = self.ask_path(title, name, file_filter)
+        if path:
+            self.settings.setValue("export/last_dir", str(Path(path).parent))
+        return Path(path) if path else None
+
+    def _done(self, path):
+        self.window.statusBar().showMessage(f"Exported {path.name}", 5000)
+        return path
+
+    def _fail(self, exc):
+        QMessageBox.critical(self.window, "Export failed", str(exc))
+
+    def _meta(self, what):
+        return metadata(self.state.inputs, what)
+
+    def _is_off(self):
+        return self.state.active_view == "offdesign" and self.state.off_design is not None
+
+    # --- exports -------------------------------------------------------------------------
+    def export_geometry(self):
+        path = self._path("Export geometry DXF", default_name(self.state.inputs, "geometry",
+                                                               "dxf"), "DXF drawing (*.dxf)")
+        if path:
+            export_dxf(api.inlet_geometry(self.state.design), path,
+                       metadata=self._meta("geometry DXF"))
+            return self._done(path)
+
+    def export_cfd(self):
+        path = self._path("Export CFD domain DXF", default_name(self.state.inputs,
+                                                                 "cfd_domain", "dxf"),
+                          "DXF drawing (*.dxf)")
+        if path:
+            export_cfd_domain_dxf(api.inlet_geometry(self.state.design), path,
+                                  metadata=self._meta("CFD domain DXF (design point)"))
+            return self._done(path)
+
+    def export_cfd_offdesign(self):
+        path = self._path("Export off-design CFD domain DXF",
+                          default_name(self.state.inputs, "cfd_offdesign_v2", "dxf"),
+                          "DXF drawing (*.dxf)")
+        if path:
+            export_offdesign_domain_dxf(
+                api.inlet_geometry(self.state.design), path, ext_outlet="normal",
+                metadata=self._meta("CFD domain DXF (off-design v2, normal OUTLET_EXT)"))
+            return self._done(path)
+
+    def export_canvas(self):
+        off = self._is_off()
+        canvas = self.window.offdesign_tab.canvas if off else self.window.canvas
+        if canvas.inlet_scene.picture is None:
+            return None
+        kind = "offdesign" if off else "design"
+        name = default_name(self.state.inputs, kind, "png",
+                            self.state.off_design.M_inf if off else None)
+        path = self._path("Export canvas figure", name, FIGURE_FILTER)
+        if not path:
+            return None
+        sk = P.skeleton_from(self.state.design, self.state.off_design if off else None)
+        d = self.state.design.inputs
+        title = (f"M {d.M:.2f} design, {d.n_ramps} ramps"
+                 + (f", at M∞ {self.state.off_design.M_inf:.2f}" if off else ""))
+        try:
+            F.save_figure(F.canvas_figure(P.build(sk), title), path,
+                          self._meta("canvas figure"))
+        except ValueError as exc:
+            self._fail(exc)
+            return None
+        return self._done(path)
+
+    def export_chart(self, kind):
+        if self.state.sweep is None:
+            return None
+        path = self._path(f"Export {kind} chart",
+                          default_name(self.state.inputs, f"chart_{kind}", "svg"), FIGURE_FILTER)
+        if not path:
+            return None
+        lo, hi = self.window.offdesign_tab.charts.range
+        try:
+            F.save_figure(F.chart_figure(kind, self.state.design, self.state.sweep,
+                                         self.state.off_design_mach(), (lo, hi)),
+                          path, self._meta(f"off-design chart: {kind}"))
+        except ValueError as exc:
+            self._fail(exc)
+            return None
+        return self._done(path)
+
+    def export_json(self):
+        path = self._path("Export results JSON",
+                          default_name(self.state.inputs, "results", "json"), "JSON (*.json)")
+        if path:
+            s = self.state
+            R.write_json(path, self._meta("results JSON"), s.design, s.freestream,
+                         s.off_design, s.sweep)
+            return self._done(path)
+
+    def export_csv(self):
+        path = self._path("Export results CSV",
+                          default_name(self.state.inputs, "results", "csv"), "CSV (*.csv)")
+        if path:
+            s = self.state
+            off = self._is_off()
+            regions = (s.off_design if off else s.design).regions
+            view = f"off-design at M∞ {s.off_design.M_inf:.2f}" if off else "design point"
+            R.write_csv(path, self._meta("results CSV"), regions, s.sweep, view)
+            return self._done(path)

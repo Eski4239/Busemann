@@ -59,8 +59,15 @@ def test_every_entry_parses_with_sourced_relations():
         assert sources, name
         for tex, source in sources:
             assert source, (name, tex)
-            assert ("pending user confirmation" in source
+            assert (source.startswith(("NACA Report 1135", "Oswatitsch"))
                     or source.startswith("definition used by this tool")), (name, source)
+            if source.startswith("Oswatitsch"):
+                assert "pending user confirmation" in source          # TM 1140 not confirmed
+            if source.startswith("NACA Report 1135"):
+                assert "pending" not in source, (name, source)      # all confirmed (M6)
+        text = C.entry_text(name)
+        assert "Connection with normal shock" not in text           # no such NACA heading
+        assert r"^\circ" not in text                               # use \degree (no gap)
 
 
 def test_every_entry_renders_for_every_case_and_item():

@@ -23,7 +23,7 @@ def _type(qtbot, field, text):
 
 
 def test_app_starts_with_layout_and_kpis(window):
-    assert window.windowTitle() == "Busemann"
+    assert window.windowTitle() == "Busemann — Untitled"
     assert window.minimumWidth() == 1280 and window.minimumHeight() == 800
     assert window.left_panel.width() == 300
     assert window.right_panel.width() == 320

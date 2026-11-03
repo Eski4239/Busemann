@@ -7,7 +7,7 @@ $$ M_1 \sin\beta_1 = M_2 \sin\beta_2 = \cdots = M_n \sin\beta_n = M_n^\ast $$
 $$ \eta = \left[\prod_{i=1}^{n} \left(\frac{p_{02}}{p_{01}}\right)_i\right] \left(\frac{p_{02}}{p_{01}}\right)_\mathrm{normal} $$
 
 ## This case
-@if design.inputs.method == "oswatitsch": @each oblique: $$ M_{n,{{n}}} = {{it.M1:.4f}}\,\sin {{it.beta_deg:.2f}}^\circ = {{it.Mn1:.4f}} $$
+@if design.inputs.method == "oswatitsch": @each oblique: $$ M_{n,{{n}}} = {{it.M1:.4f}}\,\sin {{it.beta_deg:.2f}}\degree = {{it.Mn1:.4f}} $$
 @if design.inputs.method == "custom": Custom ramp angles: the equal-strength condition is not imposed.
 @if design.constrained: The optimum is limited to a cowl angle of {{design.inputs.max_cowl_angle_deg:.1f}}°, so the shock strength is the one that just meets that limit.
 $$ \eta = {{design.recovery_total:.4f}}\quad(\mathrm{oblique}\;\mathrm{only}\;{{design.recovery_oblique:.4f}}) $$

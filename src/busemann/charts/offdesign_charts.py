@@ -18,9 +18,7 @@ from ..widgets import field_label
 from . import model
 
 UPPER_BOUND_TEXT = "upper bound — cowl shock not modelled"
-# band kind -> (colour token, alpha 0..255)
-BAND_STYLE = {"detached": ("error", 22), "spillage": ("accent", 14),
-              "overspeed": ("warn", 18), "cowl": ("error", 40)}
+BAND_STYLE = model.BAND_STYLE
 CHARTS = (("capture", "Capture A0/Ac", ""),
           ("recovery", "Recovery p0/p0∞", ""),
           ("margin", "Cowl margin", "°"))
@@ -85,7 +83,9 @@ class OffDesignCharts(QWidget):
         for key, title, unit in CHARTS:
             box = QVBoxLayout()
             box.setSpacing(2)
-            box.addWidget(field_label(f"{title} ({unit})" if unit else title, TITLE_TIPS[key]))
+            title_label = field_label(f"{title} ({unit})" if unit else title, TITLE_TIPS[key])
+            title_label.setWordWrap(True)             # narrow centre column (drawer open)
+            box.addWidget(title_label)
             legend = QLabel()
             legend.setObjectName("chartLegend")
             legend.setTextFormat(Qt.TextFormat.RichText)

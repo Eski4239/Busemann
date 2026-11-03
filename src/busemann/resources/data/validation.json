@@ -1,0 +1,77 @@
+{
+  "repository": "https://github.com/Eski4239/SuperSonic-Inlet-Designer",
+  "phases": [
+    {
+      "id": "3a",
+      "title": "Inviscid CFD, design point (M 3, 2 ramps)",
+      "result": "Outlet total pressure −0.35% vs the tool",
+      "metric": "recovery",
+      "difference_percent": -0.35,
+      "doc": "docs/validation_3a.md"
+    },
+    {
+      "id": "3b",
+      "title": "Mesh check (refined mesh vs 3a)",
+      "result": "Reproduces 3a within 0.15% everywhere",
+      "metric": "all compared quantities",
+      "difference_percent": 0.15,
+      "doc": "docs/validation_3b.md"
+    },
+    {
+      "id": "3d",
+      "title": "Off-design, below design Mach (M 2.5–3.0)",
+      "result": "Recovery within 0.1%, mass capture within 0.4%",
+      "metric": "recovery / capture",
+      "difference_percent": [
+        0.1,
+        0.4
+      ],
+      "doc": "docs/validation_3d.md"
+    },
+    {
+      "id": "3d",
+      "title": "Off-design, above design Mach (M 3.25)",
+      "result": "Recovery −4.9% vs the tool",
+      "metric": "recovery",
+      "difference_percent": -4.9,
+      "explanation": "A Mach reflection forms at the cowl lip: the lip meets freestream at 33.8° of turning, close to θ_max (35.6° at M 3.25), and the strong lip shock interacts with the ramp shocks. The tool models neither the cowl shock nor its reflection, so its above-design recovery is an upper bound.",
+      "doc": "docs/validation_3d.md"
+    }
+  ],
+  "cfd_overlay": {
+    "source": "Phase 3d inviscid Fluent CFD (docs/validation_3d.md)",
+    "design": {
+      "M": 3.0,
+      "n_ramps": 2,
+      "method": "oswatitsch",
+      "gamma": 1.4
+    },
+    "recovery_station": "before the terminal normal shock (oblique-only recovery)",
+    "points": [
+      {
+        "M": 2.5,
+        "capture": 0.77,
+        "recovery": 0.8466,
+        "note": "spillage"
+      },
+      {
+        "M": 2.75,
+        "capture": 0.888,
+        "recovery": 0.8283,
+        "note": "spillage"
+      },
+      {
+        "M": 3.0,
+        "capture": 1.0,
+        "recovery": 0.8011,
+        "note": "on-lip (design point)"
+      },
+      {
+        "M": 3.25,
+        "capture": 1.004,
+        "recovery": 0.733,
+        "note": "Mach reflection at lip; tool value is an upper bound. M 3.5 was run qualitatively only (not plotted): recovery not quantified."
+      }
+    ]
+  }
+}

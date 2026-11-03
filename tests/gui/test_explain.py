@@ -14,22 +14,50 @@ pytestmark = pytest.mark.gui
 def _open(qtbot, window):
     drawer = window.explain_drawer
     window.explain_action.setChecked(True)
-    qtbot.waitUntil(lambda: drawer._anim.state() != drawer._anim.State.Running, timeout=2000)
+    qtbot.waitUntil(lambda: not window.is_column_animating(), timeout=2000)
     return drawer
 
 
-def test_toggle_slides_drawer_in_over_results_panel(qtbot, window):
+def _rect(widget, window):
+    from PySide6.QtCore import QRect
+    return QRect(widget.mapTo(window, widget.rect().topLeft()), widget.size())
+
+
+def test_drawer_widens_right_column_instead_of_covering(qtbot, window):
     drawer = window.explain_drawer
-    assert not drawer.isVisible() and not drawer.is_open
-    assert drawer._anim.duration() == SLIDE_MS == 200
+    assert window.right_column.width() == 320 and not drawer.is_open
+    assert window._column_anim.duration() == SLIDE_MS == 200
+    centre_before = window.tabs.width()
     _open(qtbot, window)
-    central = window.centralWidget().geometry()
-    assert drawer.isVisible() and drawer.width() == DRAWER_W == 420
-    assert drawer.geometry().right() == central.right()
-    assert drawer.geometry().top() == central.top() and drawer.height() == central.height()
-    assert drawer.x() <= window.right_panel.mapTo(window, window.right_panel.rect().topLeft()).x()
+    assert window.right_column.width() == DRAWER_W == 420
+    assert window.right_column.currentWidget() is drawer and drawer.isVisible()
+    assert window.tabs.width() == centre_before - 100           # the centre column shrank
     window.explain_action.setChecked(False)
-    qtbot.waitUntil(lambda: not drawer.isVisible(), timeout=2000)
+    qtbot.waitUntil(lambda: not window.is_column_animating(), timeout=2000)
+    assert window.right_column.width() == 320
+    assert window.right_column.currentWidget() is window.right_panel
+    assert window.tabs.width() == centre_before
+
+
+@pytest.mark.parametrize("size", [(1280, 800), (1440, 900)])
+def test_drawer_never_covers_the_centre_column(qtbot, window, size):
+    from PySide6.QtWidgets import QWidget
+
+    window.resize(*size)
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    _open(qtbot, window)
+    qtbot.wait(100)
+    assert (window.width(), window.height()) == size
+    drawer_rect = _rect(window.explain_drawer, window)
+    centre = _rect(window.tabs, window)
+    assert not centre.intersects(drawer_rect)
+    for w in window.tabs.findChildren(QWidget):
+        if w.isVisibleTo(window):
+            assert not _rect(w, window).intersects(drawer_rect), (type(w).__name__, w.objectName())
+    tab = window.offdesign_tab
+    for w in (tab.badge, tab.card, tab.chip, tab.charts.note_legend):
+        assert centre.contains(_rect(w, window)), w.objectName()
+        assert w.width() >= w.minimumSizeHint().width() - 1
 
 
 def test_nothing_selected_shows_design_method(qtbot, window):
@@ -93,3 +121,39 @@ def test_topic_links(qtbot, window):
     assert drawer.entry_name == "method"
     drawer.topics.linkActivated.emit("selection")
     assert drawer.entry_name == "oblique_shock"
+
+
+def test_gui_thread_never_renders_mathtext_during_a_drag(qtbot, window, monkeypatch):
+    """Drawer open, render process warming: during a 40-step drag of the off-design slider
+    the GUI process makes no mathtext call; the drawer catches up after the release."""
+    import threading
+
+    from matplotlib import mathtext
+
+    from busemann.explain import mathsvg
+
+    calls = []
+    real = mathtext.math_to_image
+
+    def spy(*a, **k):
+        calls.append(threading.current_thread() is threading.main_thread())
+        return real(*a, **k)
+
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    drawer = _open(qtbot, window)
+    window.offdesign_tab.canvas.select("cowl", 0)
+    window._warm_equations()                            # render process starts now
+    monkeypatch.setattr(mathtext, "math_to_image", spy)
+    before = mathsvg.render_count
+    slider = window.offdesign_tab.slider.slider
+    slider.setSliderDown(True)
+    assert window.state.dragging
+    for k in range(40):
+        slider.setValue(round((2.5 - 1.2) / 0.01) + k)
+        qtbot.wait(10)
+    qtbot.waitUntil(lambda: window.state.off_design.M_inf == pytest.approx(2.89), timeout=5000)
+    assert calls == [] and mathsvg.render_count == before
+    assert drawer._pending                              # waiting for the release
+    slider.setSliderDown(False)
+    assert not window.state.dragging and not drawer._pending
+    assert drawer.rendered.title == "Cowl lip at M∞ 2.89"

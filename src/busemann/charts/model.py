@@ -17,6 +17,9 @@ from ..paths import resource_path
 CFD_DESIGN = dict(M=3.0, n_ramps=2, method="oswatitsch", gamma=1.4)
 CFD_MACH_TOL = 1e-6
 CFD_GAMMA_TOL = 1e-9
+# band kind -> (colour token, alpha 0..255); shared by the Qt charts and the figure export
+BAND_STYLE = {"detached": ("error", 22), "spillage": ("accent", 14),
+              "overspeed": ("warn", 18), "cowl": ("error", 40)}
 CFD_NOTE = "CFD validation available for the M3 2-ramp design only"
 CFD_WEDGE_NOTE = "CFD validation used a zero-thickness cowl"
 
@@ -31,7 +34,13 @@ class Band:
 
 def load_cfd():
     """Bundled Phase 3d CFD points: dict with source, design, points [{M, capture, ...}]."""
-    return json.loads(resource_path("data", "cfd_phase3d.json").read_text(encoding="utf-8"))
+    return load_validation()["cfd_overlay"]
+
+
+def load_validation():
+    """resources/data/validation.json: validation phases (About dialog) and the CFD overlay
+    points; the single source of truth for both."""
+    return json.loads(resource_path("data", "validation.json").read_text(encoding="utf-8"))
 
 
 def _validated_geometry(design):

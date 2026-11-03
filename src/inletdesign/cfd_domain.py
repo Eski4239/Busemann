@@ -20,12 +20,14 @@ import math
 
 import ezdxf
 
+from .export import write_metadata
+
 
 def _to_mm(point):
     return (point[0] * 1000.0, point[1] * 1000.0)
 
 
-def export_cfd_domain_dxf(geom, path, duct_length_factor=2.0):
+def export_cfd_domain_dxf(geom, path, duct_length_factor=2.0, metadata=None):
     """Write a closed 2D fluid-domain outline (mm, DXF R2010) with one layer per boundary.
 
     Layers: INLET, SYMMETRY, RAMP, OUTLET, COWL, TOP_FREESTREAM. The outline is
@@ -77,6 +79,7 @@ def export_cfd_domain_dxf(geom, path, duct_length_factor=2.0):
     ]
 
     doc = ezdxf.new(dxfversion="R2010")
+    write_metadata(doc, metadata)
     doc.header["$INSUNITS"] = 4
     msp = doc.modelspace()
 
@@ -103,7 +106,8 @@ def export_cfd_domain_dxf(geom, path, duct_length_factor=2.0):
 
 
 def export_offdesign_domain_dxf(
-    geom, path, duct_length_factor=2.0, top_height_factor=2.0, ext_outlet="normal"
+    geom, path, duct_length_factor=2.0, top_height_factor=2.0, ext_outlet="normal",
+    metadata=None,
 ):
     """Write a closed 2D fluid-domain outline including an external spill region.
 
@@ -194,6 +198,7 @@ def export_offdesign_domain_dxf(
     ]
 
     doc = ezdxf.new(dxfversion="R2010")
+    write_metadata(doc, metadata)
     doc.header["$INSUNITS"] = 4
     msp = doc.modelspace()
 

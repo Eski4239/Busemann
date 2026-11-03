@@ -1,15 +1,15 @@
 # Freestream
 
 ## Relations
-<!-- SOURCE: NACA Report 1135 (1953), eq. (2), p. 614: thermal equation of state p = rho R T (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (2), p. 614: thermal equation of state p = rho R T -->
 $$ \rho_\infty = \frac{p_\infty}{R\,T_\infty} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (29b), p. 616: speed of sound a^2 = gamma p / rho = gamma R T (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (29b), p. 616: speed of sound a^2 = gamma p / rho = gamma R T -->
 $$ a_\infty = \sqrt{\gamma R\,T_\infty} $$
-<!-- SOURCE: NACA Report 1135 (1953), p. 616: definition of the Mach number M = V / a (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), p. 616: definition of the Mach number M = V / a -->
 $$ V_\infty = M_\infty\,a_\infty $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (43), p. 616: T / T_t as a function of M (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (43), p. 616: T / T_t as a function of M -->
 $$ \frac{T_0}{T} = 1 + \frac{\gamma - 1}{2}\,M^2 $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (44), p. 616: p / p_t as a function of M (pending user confirmation) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (44), p. 616: p / p_t as a function of M -->
 $$ \frac{p_0}{p} = \left(1 + \frac{\gamma - 1}{2}\,M^2\right)^{\gamma/(\gamma - 1)} $$
 <!-- SOURCE: definition used by this tool (unit Reynolds number; mu from Sutherland's law as in the U.S. Standard Atmosphere 1976) -->
 $$ Re/\ell = \rho_\infty V_\infty / \mu_\infty $$

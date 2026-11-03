@@ -1,4 +1,5 @@
-"""Explain drawer (spec 4.6): slides in from the right over the results panel.
+"""Explain drawer (spec 4.6): shown in the right column, which widens to DRAWER_W while it
+is open (the centre column shrinks; nothing is covered).
 
 For the selected item (or a topic) it shows the governing relations as equations, the same
 relations with this case's numbers, a plain-language note and the assumptions. Content is
@@ -8,7 +9,7 @@ api value formatted by the template, never computed here.
 import hashlib
 import html
 
-from PySide6.QtCore import QByteArray, QEasingCurve, QPoint, QPropertyAnimation, Qt, QUrl, Signal
+from PySide6.QtCore import QByteArray, Qt, QUrl, Signal
 from PySide6.QtGui import QImage, QPainter, QTextDocument
 from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QTextBrowser, QToolButton, QVBoxLayout
@@ -19,8 +20,8 @@ from ..explain.select import build_context, topic_context
 from ..theme import tokens
 from ..tooltips import tip
 
-DRAWER_W = 420          # px
-SLIDE_MS = 200
+DRAWER_W = 420          # px, right-column width while the drawer is open
+SLIDE_MS = 200          # column width animation
 _MARGIN = 2 * tokens.space(2) + 8      # text-browser margins + scrollbar, px
 
 
@@ -31,7 +32,6 @@ class ExplainDrawer(QFrame):
         super().__init__(parent)
         self.state = state
         self.setObjectName("explainDrawer")
-        self.setFixedWidth(DRAWER_W)
         self.title = QLabel("Explain")
         self.title.setObjectName("drawerTitle")
         self.title.setToolTip(tip("drawer.title"))
@@ -66,60 +66,22 @@ class ExplainDrawer(QFrame):
         self.rendered = None
         self.images = {}                # tex -> QImage (for tests)
         self._current = ("item", None, None)
-        self._anim = QPropertyAnimation(self, b"pos", self)
-        self._anim.setDuration(SLIDE_MS)
-        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.close_button.clicked.connect(self.close_drawer)
         state.design_ready.connect(lambda *_: self.refresh())
         state.off_design_ready.connect(lambda *_: self.refresh())
         state.view_changed.connect(lambda *_: self.refresh())
-        self.hide()
+        # while a Mach slider is dragged the drawer waits: new numbers would mean rendering
+        # equations on the GUI thread at every step
+        state.dragging_changed.connect(lambda dragging: None if dragging else self._flush())
+        self._pending = False
 
-    # --- placement ----------------------------------------------------------------------
-    def area(self):
-        """(x_open, x_closed, y, height) inside the parent: right edge, below the toolbar,
-        above the status bar."""
-        parent = self.parentWidget()
-        central = parent.centralWidget().geometry()
-        return (central.right() + 1 - DRAWER_W, central.right() + 1, central.top(),
-                central.height())
-
-    def place(self):
-        x_open, x_closed, y, h = self.area()
-        self.setFixedHeight(h)
-        if self._anim.state() != QPropertyAnimation.State.Running:
-            self.move(x_open if self.is_open else x_closed, y)
-
+    # --- open / close (the main window animates the column width) --------------------
     def open(self):
-        if self.is_open:
-            return
-        self.is_open = True
-        x_open, x_closed, y, h = self.area()
-        self.setFixedHeight(h)
-        self.move(x_closed, y)
-        self.show()
-        self.raise_()
-        self.refresh()
-        self._slide(QPoint(x_closed, y), QPoint(x_open, y))
+        if not self.is_open:
+            self.is_open = True
+            self.refresh()
 
     def close_drawer(self):
-        if not self.is_open:
-            return
         self.is_open = False
-        x_open, x_closed, y, _ = self.area()
-        self._slide(self.pos(), QPoint(x_closed, y))
-        self._anim.finished.connect(self._hide_after_close)
-
-    def _hide_after_close(self):
-        self._anim.finished.disconnect(self._hide_after_close)
-        if not self.is_open:
-            self.hide()
-
-    def _slide(self, start, end):
-        self._anim.stop()
-        self._anim.setStartValue(start)
-        self._anim.setEndValue(end)
-        self._anim.start()
 
     # --- content ------------------------------------------------------------------------
     def show_item(self, kind, index):
@@ -133,13 +95,21 @@ class ExplainDrawer(QFrame):
 
     def _on_topic(self, link):
         if link == "selection":
-            canvas_sel = self.parentWidget().current_canvas().selection
+            canvas_sel = self.window().current_canvas().selection
             self.show_item(*canvas_sel)
         else:
             self.show_topic(link)
 
+    def _flush(self):
+        if self._pending:
+            self._pending = False
+            self.refresh()
+
     def refresh(self):
         if not self.is_open:
+            return
+        if self.state.dragging:
+            self._pending = True
             return
         s = self.state
         if s.design is None:

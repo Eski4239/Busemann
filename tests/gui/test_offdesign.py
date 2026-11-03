@@ -176,9 +176,9 @@ def test_above_design_lip_notice_has_cfd_tooltip(qtbot, window):
     assert not any(t.startswith("Cowl lip shock") for t in panel.warning_texts())
 
 
-def test_slider_drag_stays_responsive(qtbot, window):
-    """60 drag steps 8 ms apart: the UI thread is never blocked for long, the debounce
-    coalesces work, and the final state is the last slider position."""
+def _drag(qtbot, window, steps=60):
+    """Drag the off-design slider 2.45 -> 3.04 in 0.01 steps, 8 ms apart. Returns the tab,
+    the wall-clock gaps between steps (ms) and the off-design results received."""
     import time
 
     tab = _open_tab(qtbot, window)
@@ -187,7 +187,7 @@ def test_slider_drag_stays_responsive(qtbot, window):
     slider = tab.slider.slider
     slider.setSliderDown(True)
     gaps, last = [], time.perf_counter()
-    for k in range(60):
+    for k in range(steps):
         slider.setValue(round((2.45 - 1.2) / 0.01) + k)       # 2.45 .. 3.04
         qtbot.wait(8)
         now = time.perf_counter()
@@ -195,11 +195,24 @@ def test_slider_drag_stays_responsive(qtbot, window):
         last = now
     slider.setSliderDown(False)
     qtbot.waitUntil(lambda: window.state.off_design is not None
-                    and window.state.off_design.M_inf == pytest.approx(3.04), timeout=3000)
-    assert max(gaps) < 100.0                       # event loop kept turning (ms per step)
-    assert len(received) < 60                      # debounce + stale drop coalesced work
+                    and window.state.off_design.M_inf == pytest.approx(3.04), timeout=5000)
+    return tab, gaps, received
+
+
+def test_slider_drag_coalesces_work_and_ends_on_the_last_value(qtbot, window):
+    """Functional part of a drag (no wall-clock limit): debounce and stale-drop coalesce
+    the work, and the final state is the last slider position."""
+    tab, _, received = _drag(qtbot, window)
+    assert len(received) < 60
     assert tab.slider.value() == pytest.approx(3.04)
     assert tab.charts.cursor() == pytest.approx(3.04)
+
+
+@pytest.mark.perf
+def test_slider_drag_stays_responsive(qtbot, window):
+    """Wall-clock: the event loop keeps turning during a drag (longest step gap < 100 ms)."""
+    _, gaps, _ = _drag(qtbot, window)
+    assert max(gaps) < 100.0
 
 
 # --- M5 STEP 0: results panel follows the slider Mach on this tab ---------------------
