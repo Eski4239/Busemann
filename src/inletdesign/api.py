@@ -19,6 +19,8 @@ from . import inlet as _inlet
 from . import isentropic as _isen
 from . import oblique_shock as _obl
 from . import offdesign as _off
+from . import separation as _sep
+from . import standards as _std
 from .geometry import COWL_LIP_PREFIX, build_geometry, cowl_check, design_inlet
 from .offdesign import _deprecated_m_duct
 
@@ -129,6 +131,8 @@ class DesignResult(_Serialisable):
     cowl_margin_deg: float = None   # theta_max(M_inf) - cowl angle; < 0: cowl shock detached
     notices: tuple = ()             # Notice per warning (same order as warnings)
     constrained: bool = False       # True when the max cowl angle limit is active
+    separation: tuple = ()          # separation.SeparationCheck per shock (approximate)
+    separation_notices: tuple = ()  # Notice per flagged shock (not in `notices`)
 
     @property
     def M_duct(self):
@@ -162,6 +166,8 @@ class OffDesignResult(_Serialisable):
     cowl_wedge_deg: float = 0.0
     M_post_terminal: float = None   # behind the terminal shock (= pre if no terminal shock)
     theta_max_lip_deg: float = None # theta_max at the lip Mach; None if the lip flow is subsonic
+    separation: tuple = ()          # separation.SeparationCheck per shock (approximate)
+    separation_notices: tuple = ()  # Notice per flagged shock (not in `notices`)
 
     @property
     def M_duct(self):
@@ -246,6 +252,68 @@ def freestream(M, altitude_m=None, p=None, T=None, gamma=1.4):
 def captured_mass_flow(fs, capture_height, mass_capture=1.0):
     """mdot' = rho V h_c (A0/Ac)  (kg/s per metre span)."""
     return fs.rho * fs.V * capture_height * mass_capture
+
+
+def _positive(name, value):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) \
+            or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} must be > 0 (got {value!r})")
+    return float(value)
+
+
+def capture_height_for_mass_flow(fs, mdot, width, mass_capture=1.0):
+    """h_c = mdot / (rho V w (A0/Ac))  (m): the capture height that passes mdot (kg/s) through
+    an inlet of width w (m). At the design point A0/Ac = 1 (shock on lip)."""
+    mdot, width = _positive("required mass flow", mdot), _positive("inlet width", width)
+    return mdot / (fs.rho * fs.V * width * _positive("mass capture", mass_capture))
+
+
+def mass_flow_total(fs, capture_height, width, mass_capture=1.0):
+    """mdot = rho V h_c w (A0/Ac)  (kg/s)."""
+    return captured_mass_flow(fs, capture_height, mass_capture) * _positive("inlet width", width)
+
+
+def demand_capture_ratio(fs, mdot, capture_height, width):
+    """(A0/Ac)_demand = mdot / (rho V h_c w): the mass capture an engine demanding mdot (kg/s)
+    needs at this freestream; above the inlet's A0/Ac the inlet falls short."""
+    return _positive("required mass flow", mdot) / (
+        fs.rho * fs.V * _positive("capture height", capture_height)
+        * _positive("inlet width", width))
+
+
+def mil_recovery(M):
+    """MIL-E-5008B total-pressure recovery at M (see inletdesign.standards for the SOURCE)."""
+    _check_mach(M, minimum=0.0)
+    return float(_std.mil_e_5008b(M))
+
+
+def max_deflection(M, gamma=1.4):
+    """theta_max (deg) of an attached oblique shock at Mach M (detachment limit)."""
+    _check_mach(M)
+    _check_gamma(gamma)
+    return float(_obl.max_deflection(M, gamma)[0])
+
+
+def _separation(shocks):
+    """SeparationChecks for the shocks, and a Notice per flagged one (approximate)."""
+    checks = _sep.check_shocks(shocks)
+    notices = []
+    for c in checks:
+        if not c.flagged:
+            continue
+        if c.kind == "normal":
+            what = f"M₁ {c.M1:.2f} ≥ {c.threshold:g}, normal-shock criterion"
+            where = "the terminal normal shock"
+        else:
+            what = f"p₂/p₁ {c.value:.2f} ≥ {c.threshold:.2f}, Korkegi 1975"
+            where = c.shock
+        notices.append(Notice(
+            "warn", f"Shock-induced separation likely at {where} ({what}) — {_sep.WORDING}",
+            f"Criterion: {c.criterion}. Source: {c.source}."
+            + (f" Korkegi: {_sep.KORKEGI_SCOPE}." if c.kind == "oblique" else "")
+            + " Empirical incipient-separation check for a turbulent boundary layer; it must "
+            "be verified with a CFD solver."))
+    return checks, tuple(notices)
 
 
 def _validate_custom_angles(M, n_ramps, ramp_angles, gamma):
@@ -357,6 +425,7 @@ def _design_cached(M, n_ramps, capture_height, gamma, ramp_angles, max_cowl=None
         lip=_pt(geom.lip),
         shocks=tuple((_pt(a), _pt(b)) for a, b in geom.shocks),
     )
+    separation, separation_notices = _separation(shocks)
     inputs = DesignInputs(
         M=float(M), n_ramps=int(n_ramps), method=method,
         ramp_angles_deg=() if ramp_angles is None else angles,
@@ -373,6 +442,7 @@ def _design_cached(M, n_ramps, capture_height, gamma, ramp_angles, max_cowl=None
         shock_states=shocks, theta_max_freestream_deg=float(theta_max_inf),
         cowl_margin_deg=float(cowl_margin), notices=tuple(notices),
         constrained=bool(getattr(geom, "constrained", False)),
+        separation=separation, separation_notices=separation_notices,
     )
 
 
@@ -441,6 +511,7 @@ def _convert_off(r, design_result):
     betas = tuple(float(b) for b in r.betas_deg)
     regions, shocks, *_ = _flow_states(float(r.M_inf), angles, betas,
                                        design_result.flow_angles_deg, design_result.inputs.gamma)
+    separation, separation_notices = _separation(shocks)
     return OffDesignResult(
         M_inf=float(r.M_inf), regime=r.regime,
         dx_over_hc=tuple(float(d) for d in r.dx_over_hc),
@@ -458,6 +529,7 @@ def _convert_off(r, design_result):
         lip_flow_angle_deg=float(r.lip_flow_angle_deg),
         cowl_required_turn_deg=float(r.cowl_required_turn_deg),
         cowl_wedge_deg=float(r.cowl_wedge_deg),
+        separation=separation, separation_notices=separation_notices,
     )
 
 
@@ -521,3 +593,51 @@ def off_design_sweep(design_result, M_min, M_max, n):
                 raise
             points.append(None)
     return Sweep(machs=machs, points=tuple(points), detachment_mach=detachment_mach(design_result))
+
+
+def _redesign(design_result, angles):
+    i = design_result.inputs
+    return design(i.M, i.n_ramps, capture_height=i.capture_height, gamma=i.gamma,
+                  ramp_angles=list(angles), cowl_wedge=i.cowl_wedge_deg)
+
+
+def optimum_gap(design_result):
+    """(gap %, optimum recovery): 100 (eta_opt - eta) / eta_opt against the Oswatitsch
+    (equal-strength) design at the same Mach, ramps, gamma and capture height. Negative
+    when the design beats it."""
+    i = design_result.inputs
+    opt = design(i.M, i.n_ramps, capture_height=i.capture_height, gamma=i.gamma,
+                 cowl_wedge=i.cowl_wedge_deg)
+    eta_opt = opt.recovery_total
+    return 100.0 * (eta_opt - design_result.recovery_total) / eta_opt, eta_opt
+
+
+def recovery_sensitivity(design_result, step_deg=0.01):
+    """d(eta_total)/d(theta_k) per degree for each ramp, by central differences through
+    design(..., ramp_angles=...):  (eta(theta_k + h) - eta(theta_k - h)) / 2h.
+    One-sided where a side is infeasible (detachment, theta <= 0); None if both are."""
+    if not math.isfinite(step_deg) or step_deg <= 0:
+        raise ValueError(f"step must be > 0° (got {step_deg!r})")
+    base = tuple(design_result.ramp_angles_deg)
+    eta0 = design_result.recovery_total
+
+    def eta(k, delta):
+        angles = list(base)
+        angles[k] += delta
+        try:
+            return _redesign(design_result, angles).recovery_total
+        except ValueError:
+            return None
+
+    out = []
+    for k in range(len(base)):
+        up, down = eta(k, step_deg), eta(k, -step_deg)
+        if up is not None and down is not None:
+            out.append((up - down) / (2.0 * step_deg))
+        elif up is not None:
+            out.append((up - eta0) / step_deg)
+        elif down is not None:
+            out.append((eta0 - down) / step_deg)
+        else:
+            out.append(None)
+    return tuple(out)

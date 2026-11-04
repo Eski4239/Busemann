@@ -108,6 +108,26 @@ def series(sweep):
     return out
 
 
+MIL_POINTS = 60
+
+
+def mil_series(lo, hi, n=MIL_POINTS):
+    """(M, eta_MIL) over [lo, hi] (MIL-E-5008B; SOURCE in inletdesign.standards)."""
+    machs = [lo + (hi - lo) * k / (n - 1) for k in range(n)]
+    return machs, [api.mil_recovery(M) for M in machs]
+
+
+def engine_face(values, diffuser):
+    """Engine-face recovery estimate: inviscid recovery x subsonic diffuser recovery."""
+    return [v * diffuser for v in values]
+
+
+def demand_series(machs, demand):
+    """(M, (A0/Ac)_demand) where a demand exists (engine sizing)."""
+    pts = [(M, d) for M, d in zip(machs, demand) if d is not None]
+    return [p[0] for p in pts], [p[1] for p in pts]
+
+
 def _margin(design, M):
     p = api.off_design_point(design, M)
     return p.cowl_margin_deg

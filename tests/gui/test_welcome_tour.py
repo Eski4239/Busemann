@@ -163,3 +163,62 @@ def test_skip_stores_done_and_help_reopens(qtbot, window):
     assert tour.isVisible() and tour.step == 0
     qtbot.keyClick(tour, Qt.Key.Key_Escape)
     assert not tour.isVisible()
+
+
+# --- M8 restyle ------------------------------------------------------------------------------
+
+def test_header_thumbnail_is_drawn_from_the_validation_picture(welcome):
+    from inletdesign import api
+
+    from busemann.canvas import picture as Pic
+
+    pic = Pic.build(Pic.skeleton_from(api.design(3.0, 2)))
+    thumb = welcome.thumbnail
+    assert [s.start for s in thumb.picture.shocks] == [s.start for s in pic.shocks]
+    assert len(thumb.region_fills) == len(pic.regions)
+    image = thumb.grab().toImage()
+    assert image.width() > 0 and len({image.pixel(x, image.height() // 2)
+                                      for x in range(0, image.width(), 4)}) > 3
+
+
+def test_cards_are_title_plus_mono_subtitle_and_focusable(qtbot, welcome):
+    from busemann.theme import qt as theme
+
+    name, card = welcome.cards[1]
+    assert card.title_label.text() == name and card.title_label.font().weight() == 500
+    assert card.sub_label.font().family() == theme.mono_family()
+    assert card.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert card.focusPolicy() == Qt.FocusPolicy.StrongFocus
+    qtbot.keyClick(card, Qt.Key.Key_Space)
+    assert welcome.choice == ("preset", name)
+    assert welcome.open_button.objectName() == "secondaryButton"
+
+
+def test_recent_empty_state(welcome):
+    assert not welcome.recent_list.isVisibleTo(welcome)
+    assert welcome.recent_empty.isVisibleTo(welcome)
+    assert welcome.recent_empty.text() == W.RECENT_EMPTY
+
+
+def test_show_at_startup_defaults_on_and_off_skips_the_window(qtbot, monkeypatch):
+    import busemann.app as app_module
+
+    first = W.WelcomeDialog()
+    qtbot.addWidget(first)
+    assert first.startup_check.isChecked() and W.show_at_startup()
+    first.startup_check.setChecked(False)
+    first.reject()
+    assert not W.show_at_startup()
+    shown, windows = [], []
+    monkeypatch.setattr(W.WelcomeDialog, "exec", lambda self: shown.append(1))
+    monkeypatch.setattr(app_module.QApplication, "exec", lambda self: 0)
+    real = app_module.MainWindow
+    monkeypatch.setattr(app_module, "MainWindow",
+                        lambda *a, **k: windows.append(real(*a, **k)) or windows[-1])
+    assert app_module.main([]) == 0
+    w = windows[-1]
+    qtbot.addWidget(w)
+    assert shown == [] and w.isVisible()
+    w.project.ask_save = lambda: "discard"
+    w.close()
+    w.state.shutdown()

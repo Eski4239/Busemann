@@ -10,7 +10,7 @@ from .overlay import DimOverlay
 SHORTCUTS = (
     ("F", "Fit the drawing"),
     ("E", "Explain drawer"),
-    ("Space", "Play / pause the off-design sweep (M8)"),
+    ("Space", "Play / pause the Mach sweep (Off-design canvas or tab focused)"),
     ("1 – 4", "Design · Off-design · Analytics · Compare"),
     ("Ctrl+Z", "Undo"),
     ("Ctrl+Shift+Z", "Redo"),

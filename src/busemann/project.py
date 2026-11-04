@@ -113,11 +113,14 @@ def migrate(data):
     return data
 
 
+_OPTIONAL_FLOATS = {"off_design_mach", "mdot_kgps", "inlet_width_m"}
+
+
 def _coerce(key, value, field, name):
     default = field.default
     if value is None and (default is None):
         return None
-    kind = type(default) if default is not None else float if key == "off_design_mach" else str
+    kind = type(default) if default is not None else float if key in _OPTIONAL_FLOATS else str
     try:
         if kind is bool:
             if not isinstance(value, bool):

@@ -127,9 +127,7 @@ def canvas_figure(picture, title=None, width_in=7.0):
         return fig
 
 
-def class_label(lo, hi):
-    """Mach class label: '2.5–2.55'."""
-    return f"{lo:g}–{hi:g}"
+class_label = P.class_label
 
 
 def _mach_legend(fig, edges, fills):
@@ -163,8 +161,11 @@ CHART_LABELS = {"capture": ("Mass capture A0/Ac [-]", "capture"),
                 "margin": ("Cowl margin at the lip [°]", "margin")}
 
 
-def chart_figure(kind, design, sweep, cursor_mach=None, m_range=None, width_in=6.0):
-    """One off-design chart ("capture" | "recovery" | "margin") from charts.model data."""
+def chart_figure(kind, design, sweep, cursor_mach=None, m_range=None, width_in=6.0,
+                 diffuser=None, demand=None):
+    """One off-design chart ("capture" | "recovery" | "margin") from charts.model data.
+    diffuser: engine-face curve and the MIL-E-5008B line (recovery); demand: the engine's
+    (A0/Ac)_demand per sweep Mach (capture), as on screen."""
     if kind not in CHART_LABELS:
         raise ValueError(f"unknown chart {kind!r}")
     _register_fonts()
@@ -182,6 +183,10 @@ def chart_figure(kind, design, sweep, cursor_mach=None, m_range=None, width_in=6
             labelled.add(band.label)
         if kind == "capture":
             ax.plot(s["M"], s["capture"], color=C["accent"], lw=1.8, label="model", gid="capture")
+            if demand is not None:
+                ax.plot(*model.demand_series(sweep.machs, demand), color=C["warn"], lw=1.4,
+                        linestyle="--", label="fixed demand (engine matching not modelled)",
+                        gid="demand")
         elif kind == "recovery":
             below = [k for k, M in enumerate(s["M"]) if M <= M_d + 1e-12]
             above = [k for k, M in enumerate(s["M"]) if M >= M_d - 1e-12]
@@ -191,6 +196,12 @@ def chart_figure(kind, design, sweep, cursor_mach=None, m_range=None, width_in=6
                         lw=1.8, label=name, gid=f"{key}-below")
                 ax.plot([s["M"][k] for k in above], [s[key][k] for k in above], color=colour,
                         lw=1.8, linestyle=":", gid=f"{key}-above")
+            if diffuser is not None:
+                ax.plot(s["M"], model.engine_face(s["rec_tot"], diffuser), color=C["accent"],
+                        lw=1.1, linestyle="--", label=f"engine face (× {diffuser:.3f}, estimate)",
+                        gid="rec_face")
+                ax.plot(*model.mil_series(lo, hi), color=C["wall"], lw=1.1, linestyle="-.",
+                        label="MIL-E-5008B (vs engine-face estimate)", gid="mil")
         else:
             ax.plot(s["margin_M"], s["margin"], color=C["accent"], lw=1.8,
                     label=f"at the lip, wedge {design.inputs.cowl_wedge_deg or 0:g}°",

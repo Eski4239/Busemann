@@ -1,6 +1,7 @@
 """Application inputs (no Qt): everything the user sets, saved in project files."""
 from dataclasses import dataclass
 
+from inletdesign import api
 from inletdesign import presets as _presets
 
 
@@ -22,6 +23,14 @@ class Inputs:
     max_cowl_enabled: bool = False      # limit the Oswatitsch optimum's cowl angle
     max_cowl_deg: float = 30.0
     cowl_wedge_deg: float = 0.0         # cowl lip outer wedge; 0 = zero-thickness idealisation
+    capture_mode: str = "height"        # "height": h_c drives | "mass_flow": engine mdot drives
+    mdot_kgps: float = None             # required engine mass flow, kg/s (mass_flow mode)
+    inlet_width_m: float = None         # inlet width (span), m; None = per metre only
+    diffuser_recovery: float = 0.97     # subsonic diffuser p0 ratio (estimate)
+
+
+CAPTURE_MODES = ("height", "mass_flow")
+DEFAULT_WIDTH_M = 1.0                   # width used when sizing starts without one
 
 
 def preset_changes(name):
@@ -33,3 +42,19 @@ def preset_changes(name):
     else:
         changes.update(p_pa=p.p_pa, T_k=p.T_k)
     return changes
+
+
+def freestream_for(inputs, M):
+    """Freestream at Mach M in the inputs' atmosphere (altitude or manual p, T)."""
+    if inputs.atmosphere_mode == "altitude":
+        return api.freestream(M, altitude_m=inputs.altitude_m, gamma=inputs.gamma)
+    return api.freestream(M, p=inputs.p_pa, T=inputs.T_k, gamma=inputs.gamma)
+
+
+def sized_capture_height(inputs, fs):
+    """The capture height that drives the design: the input, or (engine sizing) the one that
+    passes the required mass flow at the design point (A0/Ac = 1)."""
+    if inputs.capture_mode == "mass_flow" and fs is not None and inputs.mdot_kgps \
+            and inputs.inlet_width_m:
+        return api.capture_height_for_mass_flow(fs, inputs.mdot_kgps, inputs.inlet_width_m)
+    return inputs.capture_height_m

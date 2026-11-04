@@ -77,6 +77,18 @@ def cancel():
     _futures.clear()
 
 
+def join(timeout=10.0):
+    """Cancel queued jobs and wait for the one already running (measurements, tests).
+    True when nothing is left running."""
+    from concurrent.futures import wait
+
+    running = [f for f in _futures if not f.cancel()]
+    _futures.clear()
+    if running:
+        wait(running, timeout)
+    return all(f.done() for f in running)
+
+
 def shutdown():
     global _executor
     cancel()

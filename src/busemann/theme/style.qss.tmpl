@@ -10,12 +10,27 @@ QMainWindow, #canvasHost {
     background: $bg;
 }
 
-#leftPanel, #rightPanel, #panelBody {
+#leftPanel, #rightPanel, #rightScroll, #panelBody {
     background: $surface;
 }
 
 #leftPanel { border-right: ${border_w}px solid $border; }
 #rightPanel { border-left: ${border_w}px solid $border; }
+#rightPanel::pane { border: none; }
+#verificationCard {
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    background: $surface;
+}
+#verificationCard[level="warn"] { border-color: $warn; }
+#verificationCard[level="error"] { border-color: $error; }
+#verificationText { color: $text; font-size: ${size_label}px; }
+#verificationSource {
+    color: $text_muted;
+    font-family: "$font_mono", "$font_mono_fallback";
+    font-size: ${size_label}px;
+}
+#verificationQuote { color: $text_muted; font-size: ${size_label}px; font-style: italic; }
 
 QScrollArea { border: none; background: $surface; }
 
@@ -126,6 +141,9 @@ QSlider::handle:horizontal {
     color: $text;
 }
 #kpiSub { color: $text_muted; font-size: ${size_label}px; }
+#kpiNote { color: $text_muted; font-size: ${size_label}px; }
+#kpiNote[level="ok"] { color: $ok; }
+#kpiNote[level="error"] { color: $error; }
 #kpiDelta { color: $text_muted; font-size: ${size_label}px; font-family: "$font_mono", "$font_mono_fallback"; }
 #noticeGroup { color: $text_muted; font-size: ${size_label}px; font-weight: 600; }
 
@@ -175,16 +193,40 @@ QSlider::handle:horizontal {
 #drawerTopics { color: $text_muted; font-size: ${size_label}px; }
 #drawerClose { font-size: 16px; color: $text_muted; }
 #explainBody { border: none; background: $surface; }
-#welcomeTitle { font-weight: 600; font-size: 20px; color: $text; }
+#welcomeDialog, #welcomeBody { background: $bg; }
+#welcomeHeader { background: $surface; border-right: ${border_w}px solid $border; }
+#welcomeTitle { color: $text; font-size: ${size_kpi}px; font-weight: 600; }
+#welcomeTagline { color: $text; }
+#welcomeVersion, #presetSub {
+    font-family: "$font_mono", "$font_mono_fallback";
+    font-size: ${size_label}px;
+    color: $text_muted;
+}
 #presetCard {
     background: $surface;
     border: ${border_w}px solid $border;
     border-radius: ${radius}px;
-    padding: ${s1}px ${s2}px;
-    text-align: left;
-    color: $text;
 }
-#presetCard:hover { border-color: $accent; }
+#presetCard:hover, #presetCard:focus { border-color: $accent; }
+#presetTitle { color: $text; font-weight: 500; }
+#emptyState {
+    color: $text_muted;
+    font-size: ${size_label}px;
+    border: ${border_w}px dashed $border;
+    border-radius: ${radius}px;
+    background: $surface;
+    padding: ${s2}px;
+}
+#secondaryButton {
+    background: $surface;
+    color: $text;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    padding: 4px ${s2}px;
+}
+#secondaryButton:hover { border-color: $accent; color: $accent; }
+#secondaryButton:focus { border-color: $accent; }
+#secondaryButton:pressed { background: $bg; }
 #welcomeList {
     border: ${border_w}px solid $border;
     border-radius: ${radius}px;
@@ -219,6 +261,14 @@ QSlider::handle:horizontal {
 #regimeBadge[regime="on-lip"] { background: $ok; }
 #regimeBadge[regime="shock-in-duct"] { background: $warn; }
 #regimeBadge[regime="detached"] { background: $error; }
+#supplyChip {
+    font-size: ${size_label}px;
+    border-radius: 4px;
+    padding: 0px 4px;
+    color: $surface;
+    background: $ok;
+}
+#supplyChip[kind="shortfall"] { background: $error; }
 #kpiBadge {
     color: $accent;
     font-size: ${size_label}px;

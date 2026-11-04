@@ -45,6 +45,14 @@ _FIELDS = {
     "max_cowl_enabled": ("Max cowl angle", lambda v, s: "on" if v else "off"),
     "max_cowl_deg": ("Max cowl angle", _num("{:.1f}°")),
     "cowl_wedge_deg": ("Cowl lip wedge", _num("{:.1f}°")),
+    "capture_mode": ("Capture size", lambda v, s: {"height": "capture height",
+                                                   "mass_flow": "engine mass flow"}.get(v, v)),
+    "mdot_kgps": ("Required ṁ", lambda v, s: "—" if v is None else
+                  f"{v / (_units.LBM if s == 'Imperial' else 1.0):.3f} "
+                  f"{'lb/s' if s == 'Imperial' else 'kg/s'}"),
+    "inlet_width_m": ("Inlet width", lambda v, s: "—" if v is None else
+                      _display("length", "{:.3f}")(v, s)),
+    "diffuser_recovery": ("Diffuser recovery", _num("{:.3f}")),
 }
 
 

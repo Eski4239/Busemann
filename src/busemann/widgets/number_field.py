@@ -23,16 +23,19 @@ class NumberField(QWidget):
     """
 
     value_changed = Signal(float)
+    cleared = Signal()              # an optional field was emptied
 
     def __init__(self, value=0.0, decimals=2, minimum=None, maximum=None,
-                 min_exclusive=False, unit="", quantity=None, parent=None):
+                 min_exclusive=False, unit="", quantity=None, optional=False, parent=None):
         super().__init__(parent)
         self.quantity = quantity
+        self.optional = optional          # empty text is a valid "no value" (value() None)
+        self._lock_action = None
         self._decimals = decimals
         self._min = minimum
         self._max = maximum
         self._min_exclusive = min_exclusive
-        self._value = float(value)
+        self._value = None if value is None else float(value)
         self._external_error = None
 
         self.edit = QLineEdit()
@@ -67,11 +70,31 @@ class NumberField(QWidget):
         return self._value
 
     def set_value(self, value, emit=False):
-        self._value = float(value)
+        self._value = None if value is None else float(value)
         self._show_value()
         self._set_error(self._external_error)  # keep errors reported by the core
-        if emit:
+        if emit and self._value is not None:
             self.value_changed.emit(self._value)
+
+    def set_placeholder(self, text):
+        self.edit.setPlaceholderText(text)
+
+    def set_locked(self, locked):
+        """Read-only with a lock icon: the value is computed from another input."""
+        from PySide6.QtWidgets import QLineEdit
+
+        self.edit.setReadOnly(locked)
+        self.edit.setFocusPolicy(Qt.FocusPolicy.ClickFocus if locked
+                                 else Qt.FocusPolicy.StrongFocus)
+        if locked and self._lock_action is None:
+            self._lock_action = self.edit.addAction(theme.icon("lock", "text_muted", 14),
+                                                    QLineEdit.ActionPosition.LeadingPosition)
+        elif not locked and self._lock_action is not None:
+            self.edit.removeAction(self._lock_action)
+            self._lock_action = None
+
+    def is_locked(self):
+        return self.edit.isReadOnly() and self._lock_action is not None
 
     def set_unit(self, unit):
         self.unit_label.setText(unit)
@@ -93,7 +116,7 @@ class NumberField(QWidget):
 
     # --- internals ----------------------------------------------------
     def _show_value(self):
-        self.edit.setText(f"{self._value:.{self._decimals}f}")
+        self.edit.setText("" if self._value is None else f"{self._value:.{self._decimals}f}")
 
     def _set_error(self, message):
         self.edit.setProperty("invalid", bool(message))
@@ -155,6 +178,14 @@ class NumberField(QWidget):
         return f"Must be ≤ {fmt(self._max)}{unit}"
 
     def _commit(self):
+        if self.edit.isReadOnly():
+            return
+        if self.optional and not self.edit.text().strip():
+            self._set_error(self._external_error)
+            if self._value is not None:
+                self._value = None
+                self.cleared.emit()
+            return
         value, message = self._validate(self.edit.text())
         if message:
             self._set_error(message)

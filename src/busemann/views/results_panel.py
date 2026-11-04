@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
+from inletdesign import api
 from inletdesign import units as _units
 
 from ..theme import qt as theme
@@ -23,6 +24,36 @@ NOTICE_LEVELS = {
     "info": ("Notes", "info", "accent"),
 }
 _ROW_NAMES = {"error": "errorRow", "warn": "warningRow", "info": "infoRow"}
+
+
+def recovery_notes(recovery, M, diffuser):
+    """KPI lines for the recovery card: engine-face estimate and the MIL-E-5008B comparison
+    (the MIL line applies to the engine face, not to the inviscid value)."""
+    face = recovery * diffuser
+    mil = api.mil_recovery(M)
+    pct = 100.0 * (face / mil - 1.0)
+    side = "above" if pct >= 0 else "below"
+    return [
+        ("engine_face", f"engine face ≈ {face:.4f} (× {diffuser:.3f} diffuser, estimate)",
+         None, tip("kpi.engine_face")),
+        ("mil", f"Engine-face estimate {abs(pct):.1f} % {side} MIL-E-5008B ({mil:.4f})",
+         "ok" if pct >= 0 else "error", tip("kpi.mil")),
+    ]
+
+
+def gap_note(gap_pct, n_ramps):
+    """'Recovery 1.3 % below the Oswatitsch optimum for 2 ramps'."""
+    ramps = f"{n_ramps} ramp" + ("s" if n_ramps != 1 else "")
+    side = "below" if gap_pct >= 0 else "above"
+    return ("gap", f"Recovery {abs(gap_pct):.1f} % {side} the Oswatitsch optimum for {ramps}",
+            None, tip("kpi.gap"))
+
+
+def _total_text(kgps, width, system):
+    value = _units.to_display(kgps, "mass_flow", system)
+    w = _units.to_display(width, "length", system)
+    return (f"total {fmt.sig(value, 4)} {_units.unit_label('mass_flow', system)} "
+            f"through {fmt.sig(w, 4)} {_units.unit_label('length', system)}")
 
 
 class ResultsPanel(QWidget):
@@ -95,6 +126,9 @@ class ResultsPanel(QWidget):
         state.inputs_changed.connect(lambda *_: self.refresh())
         state.off_design_ready.connect(lambda *_: self.refresh())
         state.view_changed.connect(lambda *_: self.refresh())
+        self._warnings_stale = False
+        state.dragging_changed.connect(
+            lambda dragging: None if dragging or not self._warnings_stale else self.refresh())
         self.refresh()
 
     def refresh(self):
@@ -102,7 +136,11 @@ class ResultsPanel(QWidget):
             self._show_off_design()
         else:
             self._show_design()
-        self._set_warnings(self.state.notices())
+        if self.state.dragging and self.notice_cards:
+            self._warnings_stale = True          # rebuilt when the slider drag ends
+        else:
+            self._warnings_stale = False
+            self._set_warnings(self.state.notices())
         if self._selection[0] is not None:       # dimensional values follow the unit system
             self.show_selection(*self._selection)
 
@@ -126,6 +164,8 @@ class ResultsPanel(QWidget):
             "incl. terminal normal shock" if has_terminal else "no terminal shock (subsonic)")
         cards["recovery_total"].set_badge(None)
         cards["recovery_total"].set_delta(f"{off.recovery_total - d.recovery_total:+.4f}")
+        cards["recovery_total"].set_notes(recovery_notes(
+            off.recovery_total, off.M_inf, self.state.inputs.diffuser_recovery))
         cards["recovery_oblique"].set_value(f"{off.recovery_oblique:.4f}", "p0/p0∞",
                                             f"{d.inputs.n_ramps} oblique shock(s)")
         cards["recovery_oblique"].set_delta(f"{off.recovery_oblique - d.recovery_oblique:+.4f}")
@@ -144,6 +184,11 @@ class ResultsPanel(QWidget):
             unit = _units.unit_label("mass_flow_per_span", system)
             cards["mass_flow"].set_value(
                 fmt.sig(_units.to_display(mdot, "mass_flow_per_span", system), 4), unit)
+            total = self.state.total_mass_flow(at_off_design=True)
+            if total is not None:
+                cards["mass_flow"].sub_label.setText(
+                    _total_text(total, self.state.inputs.inlet_width_m, system))
+                cards["mass_flow"].sub_label.show()
             if mdot_design is not None:
                 diff = _units.to_display(mdot - mdot_design, "mass_flow_per_span", system)
                 cards["mass_flow"].set_delta(f"{diff:+.4g} {unit}")
@@ -166,6 +211,11 @@ class ResultsPanel(QWidget):
             self.cards["recovery_total"].badge.setToolTip(
                 f"Oswatitsch optimum limited to a cowl angle of "
                 f"{d.inputs.max_cowl_angle_deg or 0:.1f}°" if d.constrained else "")
+            notes = recovery_notes(d.recovery_total, d.inputs.M,
+                                   self.state.inputs.diffuser_recovery)
+            if d.inputs.method == "custom" and self.state.gap is not None:
+                notes.append(gap_note(self.state.gap[0], d.inputs.n_ramps))
+            self.cards["recovery_total"].set_notes(notes)
             self.cards["recovery_oblique"].set_value(
                 f"{d.recovery_oblique:.4f}", "p0/p0∞", f"{d.inputs.n_ramps} oblique shock(s)")
             self.cards["M_duct"].set_value(f"{d.M_post_terminal:.3f}", "",
@@ -177,9 +227,12 @@ class ResultsPanel(QWidget):
         if mdot is None:
             self.cards["mass_flow"].clear()
         else:
+            total = self.state.total_mass_flow()
             self.cards["mass_flow"].set_value(
                 fmt.sig(_units.to_display(mdot, "mass_flow_per_span", system), 4),
-                _units.unit_label("mass_flow_per_span", system))
+                _units.unit_label("mass_flow_per_span", system),
+                None if total is None else
+                _total_text(total, self.state.inputs.inlet_width_m, system))
 
     def _set_warnings(self, notices):
         """notices: [(group, level, text, detail)]. Groups "design" ("Design point") and

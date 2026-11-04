@@ -26,6 +26,7 @@ _UNITS = {
     "density": {"SI": ("kg/m³", 1.0), "Imperial": ("lbm/ft³", FT**3 / LBM)},
     "velocity": {"SI": ("m/s", 1.0), "Imperial": ("ft/s", 1.0 / FT)},
     "mass_flow_per_span": {"SI": ("kg/s/m", 1.0), "Imperial": ("lbm/s/ft", FT / LBM)},
+    "mass_flow": {"SI": ("kg/s", 1.0), "Imperial": ("lb/s", 1.0 / LBM)},
     "per_length": {"SI": ("1/m", 1.0), "Imperial": ("1/ft", FT)},
     "viscosity": {"SI": ("Pa·s", 1.0), "Imperial": ("lbf·s/ft²", FT**2 / LBF)},
 }

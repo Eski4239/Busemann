@@ -31,7 +31,7 @@ def test_number_keys_switch_tabs_and_letters_trigger_actions(qtbot, window):
     scale = window.canvas.scale_factor()
     qtbot.keyClick(window, Qt.Key.Key_F)
     assert window.canvas.scale_factor() != scale            # F fits again
-    assert not window.play_action.isEnabled()               # Space: play/pause from M8
+    assert window.play_action.shortcut().isEmpty()          # no window-level Space
     check = window.design_panel.max_cowl_check
     window.design_panel.advanced.toggle.setChecked(True)
     check.setFocus()

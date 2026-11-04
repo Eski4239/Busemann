@@ -27,7 +27,7 @@ def test_every_export_action_writes_a_file(qtbot, window, tmp_path):
         assert action.isEnabled(), key
         action.trigger()
     files = sorted(p.name for p in tmp_path.iterdir() if p.suffix != ".ini")
-    assert files == sorted(names)
+    assert files == sorted(names + ["verification_notes.md"])   # beside the DXFs (M8)
     assert names[:3] == ["busemann_M3.00_2ramp_geometry.dxf",
                          "busemann_M3.00_2ramp_cfd_domain.dxf",
                          "busemann_M3.00_2ramp_cfd_offdesign_v2.dxf"]

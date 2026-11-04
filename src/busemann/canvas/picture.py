@@ -417,6 +417,12 @@ _SUPERSONIC_STEPS = (0.05, 0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 5.0)
 MAX_BINS = 7
 
 
+def class_label(lo, hi):
+    """Mach class label shared by the screen legend and the export: '2–2.5' (3 significant
+    figures, so a measured minimum such as 0.38542 reads 0.385)."""
+    return f"{lo:.3g}–{hi:.3g}"
+
+
 def mach_bins(min_M, M_inf):
     """Bin edges from min(0.5, min_M) to M_inf; M = 1 is always an edge (diverging map).
 

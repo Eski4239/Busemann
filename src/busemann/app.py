@@ -17,6 +17,7 @@ from .theme import tokens
 from .views import DesignPanel, FlightPanel, ResultsPanel
 from .explain import warm as _warm
 from .tooltips import tip
+from .verification import badge_count
 from .undo import InputUndo
 from .views.explain_drawer import DRAWER_W, SLIDE_MS, ExplainDrawer
 from .views.offdesign_tab import OffDesignTab
@@ -82,10 +83,23 @@ class MainWindow(QMainWindow):
         self.results_panel = ResultsPanel(self.state)
         self.left_panel = _side_panel("leftPanel", tokens.LEFT_PANEL_WIDTH,
                                       self.flight_panel, self.design_panel)
-        self.right_panel = _side_panel("rightPanel", tokens.RIGHT_PANEL_WIDTH, self.results_panel)
+        from .views.verification_panel import VerificationPanel
+
+        self.verification_panel = VerificationPanel(self.state)
+        # Right panel: Results | Verification tabs (the Verification tab carries a badge).
+        self.right_panel = QTabWidget()
+        self.right_panel.setObjectName("rightPanel")
+        self.right_panel.setDocumentMode(True)
+        for widget, title in ((self.results_panel, "Results"),
+                              (self.verification_panel, "Verification")):
+            scroll = _side_panel("rightScroll", tokens.RIGHT_PANEL_WIDTH, widget)
+            scroll.setMinimumWidth(0)
+            scroll.setMaximumWidth(16777215)
+            self.right_panel.addTab(scroll, title)
+        self.right_panel.tabBar().setToolTip(tip("right.tabs"))
+        self.verification_panel.count_changed.connect(self._set_verification_badge)
+        self._set_verification_badge(badge_count(self.verification_panel.items))
         # Right column: results, or the Explain drawer (column widens, centre shrinks).
-        self.right_panel.setMinimumWidth(0)
-        self.right_panel.setMaximumWidth(16777215)
         self.right_column = QStackedWidget()
         self.right_column.setObjectName("rightColumn")
         self.right_column.setFixedWidth(tokens.RIGHT_PANEL_WIDTH)
@@ -147,6 +161,11 @@ class MainWindow(QMainWindow):
         # a whole Mach-slider drag is one undo step
         slider.sliderPressed.connect(lambda: self.undo.begin_gesture("mach"))
         slider.sliderReleased.connect(self.undo.end_gesture)
+        # ...and so is a whole ramp-corner drag on the canvas (custom angles)
+        self.canvas.corner_drag_started.connect(lambda k: self.undo.begin_gesture("corner"))
+        self.canvas.corner_drag_started.connect(lambda k: self.state.set_dragging(True))
+        self.canvas.corner_drag_finished.connect(self.undo.end_gesture)
+        self.canvas.corner_drag_finished.connect(lambda: self.state.set_dragging(False))
         for canvas in self.canvases():
             canvas.selection_changed.connect(
                 lambda *sel, c=canvas: self._on_selection(c, *sel))
@@ -314,13 +333,11 @@ class MainWindow(QMainWindow):
         self.shortcuts_action.triggered.connect(self.shortcuts_overlay.open)
         help_menu.addSeparator()
         self.addAction(self.shortcuts_action)
+        # No window-level Space shortcut: it would take Space away from focused buttons and
+        # checkboxes. Space plays / pauses from the Off-design canvas (tap) or the tab
+        # background (OffDesignTab.keyPressEvent); this action is the programmatic entry.
         self.play_action = QAction("Play / pause sweep", self)
-        self.play_action.setShortcut(QKeySequence("Space"))
-        self.play_action.triggered.connect(self.toggle_play)     # wired up in M8
-        # disabled until M8: an enabled Space shortcut would take Space away from focused
-        # buttons and checkboxes (keyboard activation)
-        self.play_action.setEnabled(False)
-        self.addAction(self.play_action)
+        self.play_action.triggered.connect(self.toggle_play)
         self.tab_actions = []
         for k in range(4):
             action = QAction(f"Tab {k + 1}", self)
@@ -331,9 +348,13 @@ class MainWindow(QMainWindow):
         for action in (self.fit_action, self.explain_action):
             self.addAction(action)
 
+    def _set_verification_badge(self, n):
+        self.right_panel.setTabText(1, f"Verification ({n})" if n else "Verification")
+
     def toggle_play(self):
-        """Space: play / pause the off-design Mach sweep (M8). Nothing yet."""
-        self.play_requests = getattr(self, "play_requests", 0) + 1
+        """Play / pause the off-design Mach sweep (shows the Off-design tab)."""
+        self.tabs.setCurrentWidget(self.offdesign_tab)
+        self.offdesign_tab.playback.toggle()
 
     def _build_edit_menu(self):
         menu = self.menuBar().addMenu("&Edit")
@@ -463,8 +484,11 @@ def main(argv=None):
         window.show()
         window.project.open_later(paths[0])
         return app.exec()
-    from .views.welcome_dialog import WelcomeDialog, apply_choice
+    from .views.welcome_dialog import WelcomeDialog, apply_choice, show_at_startup
 
+    if not show_at_startup():               # "Show at startup" off: straight to the window
+        window.show()
+        return app.exec()
     welcome = WelcomeDialog()
     welcome.exec()
     apply_choice(window, welcome.choice)

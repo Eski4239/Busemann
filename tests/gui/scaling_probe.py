@@ -30,6 +30,8 @@ def clipped_widgets(window):
             continue
         if w.parent() is not None and isinstance(w.parent(), QAbstractScrollArea):
             continue                      # scroll-area internals (viewport, bars)
+        if type(w.parent()).__name__ == "QLineEdit":
+            continue                      # line-edit internals (action buttons, e.g. lock)
         hint = w.minimumSizeHint()
         policy = w.sizePolicy()
         short_w = policy.horizontalPolicy() != ignored and hint.width() > 0 and \
@@ -57,6 +59,8 @@ def panel_overflow(window):
     for panel in (window.left_panel, window.right_panel):
         if not panel.isVisible():
             continue
+        if hasattr(panel, "currentWidget"):        # right panel: Results | Verification tabs
+            panel = panel.currentWidget()
         body = panel.widget()
         if body.minimumSizeHint().width() > panel.viewport().width() + 1:
             problems.append({"widget": "panel body", "name": panel.objectName(),

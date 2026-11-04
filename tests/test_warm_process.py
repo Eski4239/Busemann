@@ -69,3 +69,17 @@ def test_prune_cache_drops_old_files_then_caps_size(tmp_path):
     assert removed == 5
     assert mathsvg.prune_cache(tmp_path / "missing", now=now) == 0
     assert mathsvg.prune_cache(tmp_path, now=now) == 0                       # within limits
+
+
+def test_join_cancels_queued_jobs_and_waits_for_the_running_one(tmp_path, monkeypatch):
+    from busemann.explain import warm
+
+    monkeypatch.setenv("BUSEMANN_CACHE_DIR", str(tmp_path))
+    futures = warm.start([r"M_%d" % k for k in range(18)], "#111827")
+    try:
+        assert len(futures) == 3
+        assert warm.join(timeout=60.0)
+        assert all(f.done() for f in futures)
+        assert warm._futures == []
+    finally:
+        warm.shutdown()

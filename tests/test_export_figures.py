@@ -104,7 +104,7 @@ def test_legend_is_discrete_classes_with_ranges():
     pic = P.build(P.skeleton_from(d))
     fig = F.canvas_figure(pic)
     edges = P.mach_bins(min(r.state.M for r in pic.regions), pic.skeleton.regions[0].M)
-    assert fig.legend_labels == [f"{a:g}–{b:g}" for a, b in zip(edges, edges[1:])]
+    assert fig.legend_labels == [f"{a:.3g}–{b:.3g}" for a, b in zip(edges, edges[1:])]
     legend_ax = fig.axes[1]
     heights = {round(p.get_height(), 9) for p in legend_ax.patches}
     assert heights == {1.0}                                   # equal-height blocks
@@ -133,3 +133,17 @@ def test_streamtube_is_dotted_like_the_canvas():
     assert lines["streamtube"].get_linewidth() == pytest.approx(0.75)
     offset, dashes = lines["streamtube"]._unscaled_dash_pattern     # custom dash: Qt DotLine
     assert (offset, tuple(dashes)) == (F.DOT[0], F.DOT[1])
+
+
+def test_chart_export_has_the_engine_face_mil_and_demand_curves():
+    d = api.design(3.0, 2)
+    sweep = api.off_design_sweep(d, api.detachment_mach(d), 4.5, 40)
+    rec = _lines(F.chart_figure("recovery", d, sweep, diffuser=0.97), "")
+    s = model.series(sweep)
+    assert list(rec["rec_face"].get_ydata()) == [v * 0.97 for v in s["rec_tot"]]
+    xs, ys = model.mil_series(min(sweep.machs), max(sweep.machs))
+    assert list(rec["mil"].get_ydata()) == ys
+    demand = tuple(1.0 for _ in sweep.machs)
+    cap = _lines(F.chart_figure("capture", d, sweep, demand=demand), "demand")
+    assert list(cap["demand"].get_xdata()) == list(sweep.machs)
+    assert "rec_face" not in _lines(F.chart_figure("recovery", d, sweep), "rec_face")

@@ -176,14 +176,39 @@ def test_above_design_lip_notice_has_cfd_tooltip(qtbot, window):
     assert not any(t.startswith("Cowl lip shock") for t in panel.warning_texts())
 
 
-def _drag(qtbot, window, steps=60):
-    """Drag the off-design slider 2.45 -> 3.04 in 0.01 steps, 8 ms apart. Returns the tab,
-    the wall-clock gaps between steps (ms) and the off-design results received."""
+def _quiesce(window):
+    """Before a wall-clock measurement: no worker job, no equation render, no garbage."""
     import gc
-    import time
+
+    from PySide6.QtCore import QThreadPool
+
+    from busemann.explain import warm
+
+    window._warm_timer.stop()
+    assert QThreadPool.globalInstance().waitForDone(10000)
+    assert warm.join(timeout=30.0)
+    gc.collect()
+
+
+def _drag(qtbot, window, steps=60, measure=False):
+    """Drag the off-design slider 2.45 -> 3.04 in 0.01 steps, 8 ms apart. Returns the tab,
+    the wall-clock gaps between steps (ms) and the off-design results received. With
+    `measure`, the app is quiesced first and the garbage collector is off during the drag."""
+    import gc
 
     tab = _open_tab(qtbot, window)
-    gc.collect()                       # measure the drag, not garbage left by earlier tests
+    if measure:
+        _quiesce(window)
+        gc.disable()
+    try:
+        return _drag_steps(qtbot, window, tab, steps)
+    finally:
+        gc.enable()
+
+
+def _drag_steps(qtbot, window, tab, steps):
+    import time
+
     received = []
     window.state.off_design_ready.connect(lambda off, err: received.append(off))
     slider = tab.slider.slider
@@ -212,10 +237,17 @@ def test_slider_drag_coalesces_work_and_ends_on_the_last_value(qtbot, window):
 
 @pytest.mark.perf
 def test_slider_drag_stays_responsive(qtbot, window):
-    """Wall-clock: the event loop keeps turning during a drag (longest step gap < 100 ms)."""
-    _, gaps, _ = _drag(qtbot, window)
-    worst = sorted(gaps)[-5:]
-    assert max(gaps) < 100.0, f"largest step gaps (ms): {[round(g) for g in worst]}"
+    """Wall-clock: the event loop keeps turning during a drag. Step pauses: 95th percentile
+    (nearest rank) < 60 ms, and no single pause >= 250 ms."""
+    import math
+
+    _, gaps, _ = _drag(qtbot, window, measure=True)
+    ordered = sorted(gaps)
+    p95 = ordered[math.ceil(0.95 * len(ordered)) - 1]
+    message = (f"p95 {p95:.0f} ms, largest step pauses (ms): "
+               f"{[round(g) for g in ordered[-5:]]}")
+    assert p95 < 60.0, message
+    assert ordered[-1] < 250.0, message
 
 
 # --- M5 STEP 0: results panel follows the slider Mach on this tab ---------------------

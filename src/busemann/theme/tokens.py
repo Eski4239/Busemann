@@ -33,7 +33,7 @@ RIGHT_PANEL_WIDTH = 320
 MIN_WINDOW = (1280, 800)
 
 DEBOUNCE_MS = 30
-OFFDESIGN_STRIP_H = 248   # px, chart strip under the off-design canvas
+OFFDESIGN_STRIP_H = 272   # px, chart strip under the off-design canvas
 
 
 def space(n=1):

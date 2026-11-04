@@ -27,6 +27,19 @@ REGIMES = {
 EMPTY = "—"
 
 
+def _mass_flow_text(kgps, system):
+    from inletdesign import units as _units
+
+    return f"{_units.to_display(kgps, 'mass_flow', system):.3g} " \
+           f"{_units.unit_label('mass_flow', system)}"
+
+
+def supply_chip(supplied, demanded):
+    """("surplus" | "shortfall", "+4.2 %"): supplied vs demanded mass flow."""
+    pct = 100.0 * (supplied - demanded) / demanded
+    return ("surplus" if pct >= 0 else "shortfall"), f"{pct:+.1f} %"
+
+
 class OffDesignCard(QFrame):
     """Values at the slider Mach, each with its difference from the design point."""
 
@@ -34,7 +47,9 @@ class OffDesignCard(QFrame):
             ("recovery", "Recovery", "offcard.recovery"),
             ("M_duct", "Duct M", "offcard.M_duct"),
             ("margin", "Margin", "offcard.margin"),
-            ("regime", "Regime", "offcard.regime"))
+            ("regime", "Regime", "offcard.regime"),
+            ("supplied", "ṁ supply", "offcard.supplied"),
+            ("demanded", "ṁ demand", "offcard.demanded"))
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -50,7 +65,7 @@ class OffDesignCard(QFrame):
         head.setObjectName("muted")
         head.setAlignment(Qt.AlignmentFlag.AlignRight)
         grid.addWidget(head, 0, 2)
-        self.values, self.deltas = {}, {}
+        self.values, self.deltas, self.names = {}, {}, {}
         for r, (key, label, tip_key) in enumerate(self.ROWS, start=1):
             name = QLabel(label)
             name.setObjectName("readoutLabel")
@@ -68,13 +83,42 @@ class OffDesignCard(QFrame):
             value.setToolTip(tip(tip_key))
             delta.setToolTip(tip("offcard.delta"))
             grid.addWidget(name, r, 0)
-            if key == "regime":                       # words, no delta: use both columns
+            self.names[key] = name
+            if key in ("regime", "supplied", "demanded"):    # no delta: use both columns
                 grid.addWidget(value, r, 1, 1, 2)
             else:
                 grid.addWidget(value, r, 1)
                 grid.addWidget(delta, r, 2)
             self.values[key], self.deltas[key] = value, delta
         grid.setColumnStretch(1, 1)
+        self.chip = QLabel()                          # surplus / shortfall chip, own row
+        self.chip.setObjectName("supplyChip")
+        self.chip.setToolTip(tip("offcard.chip"))
+        self.chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        grid.addWidget(self.chip, len(self.ROWS) + 1, 1, 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.show_flows(None, None, "SI")
+
+    def show_flows(self, supplied, demanded, system):
+        """Supplied (spillage included) vs the engine's demanded mass flow at the slider
+        Mach, with a surplus / shortfall chip. Rows hidden while not sizing to an engine."""
+        rows = (("supplied", supplied is not None and demanded is not None),
+                ("demanded", demanded is not None))
+        for key, visible in rows:
+            for w in (self.names[key], self.values[key]):   # (their delta is not shown)
+                w.setVisible(visible)
+        self.chip.setVisible(rows[0][1])
+        if demanded is None:
+            return
+        self.values["demanded"].setText(_mass_flow_text(demanded, system))
+        if supplied is None:
+            self.chip.setText("")
+            return
+        self.values["supplied"].setText(_mass_flow_text(supplied, system))
+        kind, text = supply_chip(supplied, demanded)
+        self.chip.setText(f"{kind} {text}")
+        self.chip.setProperty("kind", kind)
+        self.chip.style().unpolish(self.chip)
+        self.chip.style().polish(self.chip)
 
     def show_point(self, design, off, regime):
         def put(key, text, delta=""):
@@ -129,6 +173,10 @@ class OffDesignTab(QWidget):
         # chip + regime badge, then the full-width slider.
         top = QHBoxLayout()
         top.setSpacing(tokens.space(2))
+        from .playback import Playback, PlaybackControls
+
+        self.playback = Playback(state, self)
+        self.playback_controls = PlaybackControls(self.playback)
         top.addWidget(self.chip, 0)
         top.addStretch(1)
         top.addWidget(self.badge, 0)
@@ -136,7 +184,11 @@ class OffDesignTab(QWidget):
         header.setContentsMargins(tokens.space(2), tokens.space(1), tokens.space(2), 0)
         header.setSpacing(4)
         header.addLayout(top)
-        header.addWidget(self.slider)
+        slider_row = QHBoxLayout()
+        slider_row.setSpacing(tokens.space(2))
+        slider_row.addWidget(self.slider, 1)
+        slider_row.addWidget(self.playback_controls, 0, Qt.AlignmentFlag.AlignBottom)
+        header.addLayout(slider_row)
 
         self.canvas = InletCanvas(state, mode="offdesign")
         self.charts = OffDesignCharts()
@@ -165,6 +217,11 @@ class OffDesignTab(QWidget):
         layout.addWidget(self.canvas, 1)
         layout.addWidget(strip)
 
+        # Space plays / pauses while the tab background or the canvas has focus (a focused
+        # button keeps Space for itself)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.canvas.space_tapped.connect(self.playback.toggle)
+        self.slider.slider.sliderPressed.connect(self.playback.stop)
         self.slider.value_changed.connect(self._from_slider)
         self.slider.slider.sliderPressed.connect(lambda: self.canvas.set_animations_enabled(False))
         self.slider.released.connect(lambda: self.canvas.set_animations_enabled(True))
@@ -175,6 +232,13 @@ class OffDesignTab(QWidget):
         if state.design is not None:
             self._on_design()
             self._on_off_design()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat() and self.hasFocus():
+            self.playback.toggle()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     # --- inputs -------------------------------------------------------------------------
     def _from_slider(self, M):
@@ -200,7 +264,11 @@ class OffDesignTab(QWidget):
         self.slider.set_range(lo, hi)
         M = self.state.off_design_mach()
         self.slider.set_value(M)
-        self.charts.set_data(d, self.state.sweep, (lo, hi))
+        i = self.state.inputs
+        mdot = self.state.demanded_mass_flow()
+        self.charts.set_data(d, self.state.sweep, (lo, hi), diffuser=i.diffuser_recovery,
+                             demand=self.state.demand,
+                             mdot_text=None if mdot is None else _mass_flow_text(mdot, i.units))
         self.charts.set_cursor(M)
 
     def _on_off_design(self):
@@ -214,6 +282,8 @@ class OffDesignTab(QWidget):
         self.badge.style().unpolish(self.badge)
         self.badge.style().polish(self.badge)
         self.card.show_point(self.state.design, off, regime)
+        self.card.show_flows(self.state.total_mass_flow(at_off_design=True),
+                             self.state.demanded_mass_flow(), self.state.inputs.units)
         if not self.slider.is_dragging():
             self.charts.set_cursor(self.state.off_design_mach())
 

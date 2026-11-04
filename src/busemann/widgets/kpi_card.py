@@ -49,6 +49,11 @@ class KpiCard(QFrame):
         layout.addLayout(value_row)
         layout.addWidget(self.sub_label)
         layout.addWidget(self.delta_label)
+        self._notes_layout = QVBoxLayout()
+        self._notes_layout.setContentsMargins(0, 2, 0, 0)
+        self._notes_layout.setSpacing(2)
+        layout.addLayout(self._notes_layout)
+        self.notes = {}                 # key -> QLabel, in display order
         attach(self, key)
 
     def set_value(self, text, unit="", sub=None):
@@ -67,10 +72,41 @@ class KpiCard(QFrame):
         self.badge.setText(theme.caps(text) if text else "")
         self.badge.setVisible(bool(text))
 
+    def set_notes(self, notes):
+        """Extra small lines under the value: [(key, text, level, tooltip)]; level "ok",
+        "error" or None (muted). An empty list removes them."""
+        keys = [n[0] for n in notes]
+        if keys != list(self.notes):            # rebuild only when the set of lines changes
+            for label in self.notes.values():
+                label.deleteLater()
+            self.notes = {}
+            for key in keys:
+                label = QLabel()
+                label.setObjectName("kpiNote")
+                label.setWordWrap(True)
+                self._notes_layout.addWidget(label)
+                self.notes[key] = label
+        for key, text, level, tooltip in notes:  # same lines: update in place (slider drags)
+            label = self.notes[key]
+            if label.text() != text:
+                label.setText(text)
+            level = level or "muted"
+            if label.property("level") != level:
+                label.setProperty("level", level)
+                label.style().unpolish(label)
+                label.style().polish(label)
+            if label.toolTip() != tooltip:
+                label.setToolTip(tooltip)
+
+    def note(self, key):
+        label = self.notes.get(key)
+        return label.text() if label is not None else None
+
     def clear(self, sub=None):
         self.set_value(EMPTY, sub=sub)
         self.set_badge(None)
         self.set_delta(None)
+        self.set_notes([])
 
     def text(self):
         return self.value_label.text()

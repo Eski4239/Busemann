@@ -80,6 +80,12 @@ class ExportController(QObject):
     def _meta(self, what):
         return metadata(self.state.inputs, what)
 
+    def _notes(self, export_path, meta):
+        """verification_notes.md beside a geometry / CFD export (addendum E)."""
+        from ..export.notes import write_verification_notes
+
+        return write_verification_notes(export_path, meta, self.state.verification_items())
+
     def _is_off(self):
         return self.state.active_view == "offdesign" and self.state.off_design is not None
 
@@ -88,8 +94,10 @@ class ExportController(QObject):
         path = self._path("Export geometry DXF", default_name(self.state.inputs, "geometry",
                                                                "dxf"), "DXF drawing (*.dxf)")
         if path:
+            meta = self._meta("geometry DXF")
             export_dxf(api.inlet_geometry(self.state.design), path,
-                       metadata=self._meta("geometry DXF"))
+                       metadata=meta)
+            self._notes(path, meta)
             return self._done(path)
 
     def export_cfd(self):
@@ -97,8 +105,10 @@ class ExportController(QObject):
                                                                  "cfd_domain", "dxf"),
                           "DXF drawing (*.dxf)")
         if path:
+            meta = self._meta("CFD domain DXF (design point)")
             export_cfd_domain_dxf(api.inlet_geometry(self.state.design), path,
-                                  metadata=self._meta("CFD domain DXF (design point)"))
+                                  metadata=meta)
+            self._notes(path, meta)
             return self._done(path)
 
     def export_cfd_offdesign(self):
@@ -106,9 +116,11 @@ class ExportController(QObject):
                           default_name(self.state.inputs, "cfd_offdesign_v2", "dxf"),
                           "DXF drawing (*.dxf)")
         if path:
+            meta = self._meta("CFD domain DXF (off-design v2, normal OUTLET_EXT)")
             export_offdesign_domain_dxf(
                 api.inlet_geometry(self.state.design), path, ext_outlet="normal",
-                metadata=self._meta("CFD domain DXF (off-design v2, normal OUTLET_EXT)"))
+                metadata=meta)
+            self._notes(path, meta)
             return self._done(path)
 
     def export_canvas(self):
@@ -144,7 +156,9 @@ class ExportController(QObject):
         lo, hi = self.window.offdesign_tab.charts.range
         try:
             F.save_figure(F.chart_figure(kind, self.state.design, self.state.sweep,
-                                         self.state.off_design_mach(), (lo, hi)),
+                                         self.state.off_design_mach(), (lo, hi),
+                                         diffuser=self.state.inputs.diffuser_recovery,
+                                         demand=self.state.demand),
                           path, self._meta(f"off-design chart: {kind}"))
         except ValueError as exc:
             self._fail(exc)

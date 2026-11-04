@@ -20,23 +20,7 @@ from ..charts.model import load_validation
 from ..paths import resource_path
 from ..theme import tokens
 
-ABOUT = (
-    "Busemann is a design lab for two-dimensional external-compression supersonic inlets. "
-    "It designs the ramp system for a flight condition (the Oswatitsch equal-strength "
-    "optimum or your own angles), draws the shock system, and reports pressure recovery, "
-    "mass capture and the flow state in every region, at the design point and off design. "
-    "Every relation is analytical (NACA Report 1135) and the model has been checked against "
-    "inviscid Fluent CFD."
-)
-ASSUMPTIONS = (
-    "Two-dimensional, steady, inviscid flow; no boundary layers or bleed.",
-    "Calorically perfect gas (constant γ); a warning is shown when T0 makes this optimistic.",
-    "Straight, attached oblique shocks on the weak branch; a terminal normal shock at the "
-    "throat.",
-    "Shock-on-lip design; off design the geometry is frozen.",
-    "Not modelled: the external cowl shock and its reflections, shock merging, the subsonic "
-    "diffuser; above the design Mach the recovery is an upper bound.",
-)
+from ..verification import ABOUT, ASSUMPTIONS  # noqa: E402,F401  (Qt-free texts)
 
 
 def components():

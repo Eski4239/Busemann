@@ -359,3 +359,19 @@ def test_max_cowl_with_custom_angles_shows_info_card(qtbot, window):
     assert "info" in panel.card_levels()
     [note] = [t for t, lv in zip(panel.warning_texts(), panel.warning_levels()) if lv == "info"]
     assert "ignored for custom angles" in note
+
+
+def test_screen_legend_uses_class_labels_like_the_export(window):
+    from busemann.canvas import picture as P
+    from busemann.export import figures as F
+
+    canvas = window.canvas
+    edges = canvas.inlet_scene.mach_edges
+    labels = canvas.legend_labels()
+    assert labels == [F.class_label(a, b) for a, b in zip(edges, edges[1:])]
+    assert labels[0].startswith("0.5–") and "–" in labels[-1]
+    from PySide6.QtGui import QFontMetrics
+    from busemann.theme import qt as theme
+    width = QFontMetrics(theme.mono_font(11)).horizontalAdvance(max(labels, key=len))
+    assert 12 + 14 + 7 + width <= canvas.legend_rect().width()
+    assert P.class_label(0.38542, 0.75) == "0.385–0.75"

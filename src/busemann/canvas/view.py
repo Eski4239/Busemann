@@ -3,13 +3,19 @@
 Hover (floating read-out), click selection, wheel zoom about the cursor, middle- or
 Space-drag pan, F / double-click fit, layer toggles, grid with scale bar, Mach legend,
 150 ms transitions between designs, and a greyed last-valid drawing on errors.
+
+Custom angles (addendum C4): the downstream end of every ramp is a draggable handle. The
+drag rotates that ramp about its start corner (theta_k snapped to 0.1°, Shift 0.01°) and a
+shaded no-go wedge shows the attached-shock limit theta_max(M_k) at that corner. On the
+off-design canvas a Space tap (no pan in between) emits space_tapped (play / pause).
 """
 import math
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QBrush, QPainter, QPen, QTransform
+from PySide6.QtGui import QBrush, QPainter, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import QFrame, QGraphicsView, QLabel
 
+from inletdesign import api
 from inletdesign import units as _units
 
 from ..theme import qt as theme
@@ -23,8 +29,23 @@ from .scene import M, S, InletScene, color
 
 _ZOOM_STEP = 1.15
 _SCALE_LIMITS = (0.02, 400.0)     # screen px per mm
-_LEGEND_W = 84                    # legend card width, px
+_LEGEND_W = 116                   # legend card width, px (fits '1.95–2.02')
 _LEGEND_ROW_H = 20                # px per Mach bin in the legend
+HANDLE_R = 5                      # corner handle radius, px
+HANDLE_PICK_PX = 9                # handle pick distance, px
+SNAP_DEG, FINE_SNAP_DEG = 0.1, 0.01
+
+
+def snap_angle(theta, fine=False):
+    """theta rounded to the drag grid: 0.1°, or 0.01° with Shift."""
+    step = FINE_SNAP_DEG if fine else SNAP_DEG
+    return round(round(theta / step) * step, 10)
+
+
+def ramp_theta(pivot, pointer, flow_in_deg):
+    """Incremental ramp angle (deg) that points a ramp starting at `pivot` towards `pointer`
+    (model coordinates, y up), given the flow direction arriving at that corner."""
+    return math.degrees(math.atan2(pointer[1] - pivot[1], pointer[0] - pivot[0])) - flow_in_deg
 
 
 def nice_step(x):
@@ -41,6 +62,9 @@ def nice_step(x):
 class InletCanvas(QGraphicsView):
     selection_changed = Signal(object, object, object)   # kind|None, index|None, payload|None
     picture_changed = Signal()      # the region states shown changed (not per animation frame)
+    space_tapped = Signal()         # off-design canvas: Space pressed and released, no pan
+    corner_drag_started = Signal(int)
+    corner_drag_finished = Signal()
 
     def __init__(self, state, mode="design", parent=None):
         """mode "design": the shock-on-lip design; "offdesign": its frozen geometry at the
@@ -89,6 +113,9 @@ class InletCanvas(QGraphicsView):
         self._pan_from = None
         self._press_at = None
         self._space = False
+        self._space_panned = False
+        self.corner_drag = None      # dict while a ramp corner is dragged
+        self.hovered_handle = None
 
         if mode == "offdesign":
             state.off_design_ready.connect(lambda *_: self._on_result(state.design,
@@ -372,6 +399,122 @@ class InletCanvas(QGraphicsView):
             title, rows = shock.state.name[:1].upper() + shock.state.name[1:], shock_rows(shock.state)
         self.hover_card.show_rows(title, rows, QPointF(view_pos).toPoint())
 
+    # --- ramp corner handles (custom angles) ---------------------------------------------
+    def handles_enabled(self):
+        d = self.state.design
+        return (self.mode == "design" and d is not None and self._shown is not None
+                and self.state.inputs.method == "custom" and d.inputs.n_ramps > 0
+                and self.error_text is None and len(self._shown.corners) == d.inputs.n_ramps)
+
+    def corner_handles(self):
+        """[(k, pivot_mm, handle_mm)]: ramp k turns about pivot; its handle is its end."""
+        if not self.handles_enabled():
+            return []
+        sk = self._shown
+        ends = list(sk.corners[1:]) + [sk.foot]
+        return [(k, sk.corners[k], ends[k]) for k in range(len(sk.corners))]
+
+    def handle_view_pos(self, k):
+        for j, _, end in self.corner_handles():
+            if j == k:
+                return QPointF(self.mapFromScene(S(end)))
+        return None
+
+    def handle_at(self, view_pos):
+        best, best_d = None, HANDLE_PICK_PX
+        for k, _, end in self.corner_handles():
+            q = QPointF(self.mapFromScene(S(end)))
+            d = math.hypot(q.x() - view_pos.x(), q.y() - view_pos.y())
+            if d <= best_d:
+                best, best_d = k, d
+        return best
+
+    def start_corner_drag(self, k):
+        d = self.state.design
+        _, pivot, _ = self.corner_handles()[k]
+        M_k = d.regions[k].M
+        self.corner_drag = dict(k=k, pivot=pivot, flow_in=d.flow_angles_deg[k], M=M_k,
+                                theta_max=api.max_deflection(M_k, d.inputs.gamma),
+                                theta=d.ramp_angles_deg[k], auto_fit=self._auto_fit)
+        self._auto_fit = False             # the view must not rescale under the pointer
+        self.hover_card.hide()
+        self.corner_drag_started.emit(k)
+        self.viewport().update()
+
+    def drag_corner_to(self, view_pos, fine=False):
+        """Set theta_k from a pointer position (snapped, clamped below the detachment
+        limit and above 0). Returns the angle used."""
+        drag = self.corner_drag
+        inverse, _ = self.viewportTransform().inverted()      # sub-pixel, unlike mapToScene
+        pointer = M(inverse.map(QPointF(view_pos)))
+        step = FINE_SNAP_DEG if fine else SNAP_DEG
+        theta = snap_angle(ramp_theta(drag["pivot"], pointer, drag["flow_in"]), fine)
+        top = math.floor((drag["theta_max"] - 1e-6) / step) * step
+        theta = round(min(max(theta, step), top), 10)
+        if theta != drag["theta"]:
+            drag["theta"] = theta
+            angles = list(self.state.inputs.custom_angles)
+            angles[drag["k"]] = theta
+            self.state.update(custom_angles=tuple(angles))
+        self.viewport().update()
+        return theta
+
+    def finish_corner_drag(self):
+        if self.corner_drag is None:
+            return
+        auto = self.corner_drag["auto_fit"]
+        self.corner_drag = None
+        self._auto_fit = auto
+        self.corner_drag_finished.emit()
+        self.viewport().update()
+
+    def _draw_handles(self, painter):
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        drag = self.corner_drag
+        if drag is not None:
+            self._draw_no_go(painter, drag)
+        for k, _, end in self.corner_handles():
+            q = QPointF(self.mapFromScene(S(end)))
+            active = (drag is not None and drag["k"] == k) or self.hovered_handle == k
+            painter.setPen(QPen(color("accent"), 2))
+            painter.setBrush(color("accent") if active else color("surface"))
+            painter.drawEllipse(q, HANDLE_R, HANDLE_R)
+
+    def _draw_no_go(self, painter, drag):
+        """Shaded wedge from theta_max(M_k) to 90° past the incoming flow at that corner."""
+        pv = QPointF(self.mapFromScene(S(drag["pivot"])))
+        end = self.handle_view_pos(drag["k"])
+        r = max(80.0, 1.4 * math.hypot(end.x() - pv.x(), end.y() - pv.y())) if end else 120.0
+        start = drag["flow_in"] + drag["theta_max"]
+        span = 90.0 - drag["theta_max"]
+        rect = QRectF(pv.x() - r, pv.y() - r, 2 * r, 2 * r)
+        path = QPainterPath(pv)
+        path.arcTo(rect, start, span)
+        path.closeSubpath()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(color("error", 0.12))
+        painter.drawPath(path)
+        a = math.radians(start)
+        edge = QPointF(pv.x() + r * math.cos(a), pv.y() - r * math.sin(a))
+        dashed = QPen(color("error"), 1.25)
+        dashed.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(dashed)
+        painter.drawLine(pv, edge)
+        painter.setFont(theme.mono_font(tokens.SIZE_LABEL))
+        for row, (token, text) in enumerate((
+                ("text", f"θ{drag['k'] + 1} {drag['theta']:.2f}°"),
+                ("error", f"limit θmax {drag['theta_max']:.2f}° (M {drag['M']:.2f})"))):
+            painter.setPen(color(token))
+            painter.drawText(QRectF(pv.x() + 8, pv.y() + 6 + 16 * row, 260, 16),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+
+    def no_go_angles(self):
+        """(start, end) absolute directions (deg, model) of the shaded wedge while dragging."""
+        drag = self.corner_drag
+        if drag is None:
+            return None
+        return drag["flow_in"] + drag["theta_max"], drag["flow_in"] + 90.0
+
     # --- events --------------------------------------------------------------------------
     def wheelEvent(self, event):
         steps = event.angleDelta().y() / 120.0
@@ -381,8 +524,15 @@ class InletCanvas(QGraphicsView):
 
     def mousePressEvent(self, event):
         button = event.button()
+        if button == Qt.MouseButton.LeftButton and not self._space:
+            k = self.handle_at(event.position())
+            if k is not None:
+                self.start_corner_drag(k)
+                event.accept()
+                return
         if button == Qt.MouseButton.MiddleButton or (
                 button == Qt.MouseButton.LeftButton and self._space):
+            self._space_panned = self._space_panned or self._space
             self._pan_from = event.position()
             self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
@@ -392,6 +542,20 @@ class InletCanvas(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
+        if self.corner_drag is not None:
+            fine = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
+            self.drag_corner_to(event.position(), fine)
+            event.accept()
+            return
+        k = self.handle_at(event.position())
+        if k != self.hovered_handle:
+            self.hovered_handle = k
+            self.viewport().update()
+        if k is not None:
+            self.hover_card.hide()
+            self.viewport().setCursor(Qt.CursorShape.SizeAllCursor)
+            event.accept()
+            return
         if self._pan_from is not None:
             delta = event.position() - self._pan_from
             self._pan_from = event.position()
@@ -404,6 +568,10 @@ class InletCanvas(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self.corner_drag is not None and event.button() == Qt.MouseButton.LeftButton:
+            self.finish_corner_drag()
+            event.accept()
+            return
         if self._pan_from is not None:
             self._pan_from = None
             self.viewport().unsetCursor()
@@ -432,6 +600,7 @@ class InletCanvas(QGraphicsView):
             self.fit()
         elif event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self._space = True
+            self._space_panned = False
             self.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
         else:
             super().keyPressEvent(event)
@@ -440,6 +609,8 @@ class InletCanvas(QGraphicsView):
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self._space = False
             self.viewport().unsetCursor()
+            if self.mode == "offdesign" and not self._space_panned:
+                self.space_tapped.emit()            # a tap plays / pauses; hold+drag pans
         else:
             super().keyReleaseEvent(event)
 
@@ -479,6 +650,8 @@ class InletCanvas(QGraphicsView):
             self._draw_legend(painter)
         if self.grid_visible:
             self._draw_scale_bar(painter)
+        if self.corner_handles():
+            self._draw_handles(painter)
         painter.restore()
 
     def _draw_legend(self, painter):
@@ -507,18 +680,23 @@ class InletCanvas(QGraphicsView):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(QRectF(x, top, bar_w, rows * _LEGEND_ROW_H))
         painter.setFont(theme.mono_font(tokens.SIZE_LABEL))
-        for i, edge in enumerate(edges):
-            y = bottom - i * _LEGEND_ROW_H
-            sonic = abs(edge - 1.0) < 1e-9
-            painter.setPen(QPen(color("text" if sonic else "text_muted"), 1.5 if sonic else 1))
-            if sonic:
-                painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
-            else:
-                painter.drawLine(QPointF(x + bar_w, y), QPointF(x + bar_w + 3, y))
-            painter.setPen(color("text" if sonic else "text_muted"))
-            painter.drawText(QRectF(x + bar_w + 7, y - 8, card.right() - x - bar_w - 10, 16),
+        painter.setPen(color("text_muted"))
+        for i in range(rows):                       # class label centred on its block
+            y0 = bottom - (i + 1) * _LEGEND_ROW_H
+            painter.drawText(QRectF(x + bar_w + 7, y0, card.right() - x - bar_w - 10,
+                                    _LEGEND_ROW_H),
                              Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                             f"{edge:.3g}")
+                             P.class_label(edges[i], edges[i + 1]))
+        if any(abs(e - 1.0) < 1e-9 for e in edges):  # thin dark sonic line at M = 1
+            k = next(i for i, e in enumerate(edges) if abs(e - 1.0) < 1e-9)
+            y = bottom - k * _LEGEND_ROW_H
+            painter.setPen(QPen(color("text"), 1.5))
+            painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
+
+    def legend_labels(self):
+        """The class labels the legend draws, lowest Mach first (tests)."""
+        edges = self.inlet_scene.mach_edges
+        return [P.class_label(a, b) for a, b in zip(edges, edges[1:])]
 
     def _draw_scale_bar(self, painter):
         vp = self.viewport()

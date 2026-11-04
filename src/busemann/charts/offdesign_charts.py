@@ -18,6 +18,11 @@ from ..widgets import field_label
 from . import model
 
 UPPER_BOUND_TEXT = "upper bound — cowl shock not modelled"
+FACE_TEXT = "engine face (estimate): total × diffuser {d:.3f}"
+MIL_TEXT = ("MIL-E-5008B — compare with the engine-face estimate (dashed), not the inviscid "
+            "total")
+DEMAND_TEXT = ("fixed demand (engine matching not modelled): A0/Ac needed for {mdot} at each "
+               "M∞ (above the model: shortfall)")
 BAND_STYLE = model.BAND_STYLE
 CHARTS = (("capture", "Capture A0/Ac", ""),
           ("recovery", "Recovery p0/p0∞", ""),
@@ -75,6 +80,7 @@ class OffDesignCharts(QWidget):
         self.cfd_visible = False
         self.range = (1.2, 4.5)
         self._guard = False
+        self._diffuser = self._demand = self._mdot_text = None
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
@@ -160,10 +166,13 @@ class OffDesignCharts(QWidget):
         self.note_legend.setText("")
         self.cfd_visible = False
 
-    def set_data(self, design, sweep, m_range):
+    def set_data(self, design, sweep, m_range, diffuser=None, demand=None, mdot_text=None):
         """Rebuild every chart for a design and its sweep over m_range = (min, max).
+        diffuser: engine-face curve (recovery x diffuser) and the MIL-E-5008B line;
+        demand: (A0/Ac)_demand per sweep Mach (engine sizing), drawn on the capture chart.
         Never emits cursor_moved (cursor bounds may move the cursor lines)."""
         self._guard = True
+        self._diffuser, self._demand, self._mdot_text = diffuser, demand, mdot_text
         try:
             self._set_data(design, sweep, m_range)
         finally:
@@ -191,6 +200,15 @@ class OffDesignCharts(QWidget):
             self.curves[key] = rec.plot(*pick(s[key], below), pen=_pen(token, width))
             self.curves[key + "_hi"] = rec.plot(
                 *pick(s[key], above), pen=_pen(token, width, Qt.PenStyle.DotLine))
+        if self._diffuser is not None:
+            self.curves["rec_face"] = rec.plot(
+                s["M"], model.engine_face(s["rec_tot"], self._diffuser),
+                pen=_pen("accent", 1.2, Qt.PenStyle.DashLine))
+            self.curves["mil"] = rec.plot(*model.mil_series(lo, hi),
+                                          pen=_pen("wall", 1.2, Qt.PenStyle.DashDotLine))
+        if self._demand is not None:
+            self.curves["demand"] = cap.plot(*model.demand_series(sweep.machs, self._demand),
+                                             pen=_pen("warn", 1.5, Qt.PenStyle.DashLine))
         self.curves["margin"] = mar.plot(s["margin_M"], s["margin"], pen=_pen("accent", 2),
                                          connect="finite")
         mar.addItem(pg.InfiniteLine(pos=0.0, angle=0,
@@ -214,6 +232,7 @@ class OffDesignCharts(QWidget):
     def _set_legends(self, design, overspeed):
         """One-line legends per chart; the long notes go in the full-width footer."""
         cfd = f" &nbsp; {_key('text', '○')} CFD" if self.cfd_visible else ""
+        # one line per chart; the engine-face, MIL and demand curves are named in the footer
         self.legends["capture"].setText(f"{_key('accent', '━')} model{cfd}")
         self.legends["recovery"].setText(
             f"{_key('accent', '━')} total &nbsp; {_key('text_muted', '━')} oblique{cfd}")
@@ -224,6 +243,11 @@ class OffDesignCharts(QWidget):
         notes = []
         if overspeed:
             notes.append(_entry(_key("text_muted", "┅"), f"above design: {UPPER_BOUND_TEXT}"))
+        if self._diffuser is not None:
+            notes.append(_entry(_key("accent", "╌"), FACE_TEXT.format(d=self._diffuser)))
+            notes.append(_entry(_key("wall", "─·"), MIL_TEXT))
+        if self._demand:
+            notes.append(_entry(_key("warn", "╌"), DEMAND_TEXT.format(mdot=self._mdot_text)))
         if self.cfd_visible:
             notes.append(_entry(_key("text", "○"), "CFD (Fluent, inviscid)"))
         self.footer_parts = [text for _, text in self._band_parts + notes]
