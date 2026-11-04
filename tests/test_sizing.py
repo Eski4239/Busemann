@@ -45,7 +45,7 @@ def test_sized_state_helper_and_project_round_trip(tmp_path):
     fs = freestream_for(i, i.mach)
     assert sized_capture_height(i, fs) == pytest.approx(30.0 / (fs.rho * fs.V * 0.8), rel=1e-15)
     assert sized_capture_height(Inputs(), fs) == Inputs().capture_height_m
-    path = tmp_path / "s.busemann"
+    path = tmp_path / "s.dxf"
     P.save(path, i, None)
     loaded, _, warnings = P.load(path)
     assert loaded == i and warnings == []

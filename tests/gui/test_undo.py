@@ -74,7 +74,7 @@ def test_view_settings_and_off_design_mach_are_not_recorded(qtbot, window):
 def test_open_and_new_clear_history(qtbot, window, tmp_path):
     _wait_design(qtbot, window, lambda: window.state.update(n_ramps=3))
     assert window.undo.stack.count() == 1
-    path = tmp_path / "p.busemann"
+    path = tmp_path / "p.dxf"
     P.save(path, Inputs(mach=2.5), None)
     _wait_design(qtbot, window, lambda: window.project.open_path(path, ask=False))
     assert window.undo.stack.count() == 0

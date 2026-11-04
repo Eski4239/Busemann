@@ -79,7 +79,7 @@ def test_altitude_accepts_feet_and_rejects_kelvin(qtbot, window):
     assert field.edit.text() == "19.81" and field.error() is None
     field.edit.setText("300 K")
     field.edit.editingFinished.emit()
-    assert field.error() == "K is not an altitude"
+    assert field.error() == "K is not an altitude (use km, m, ft, kft)"
     assert window.state.inputs.altitude_m == pytest.approx(19812.0)     # unchanged
     assert "Accepts units: km, m, ft, kft" in field.toolTip()
 

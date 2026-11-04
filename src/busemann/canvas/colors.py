@@ -39,3 +39,17 @@ def bin_colors(edges):
         k = min(int(x), len(stops) - 2)
         out[i] = mix(stops[k], stops[k + 1], x - k)
     return out
+
+
+def _ramp(stops, t):
+    t = min(max(t, 0.0), 1.0) * (len(stops) - 1)
+    k = min(int(t), len(stops) - 2)
+    return mix(stops[k], stops[k + 1], t - k)
+
+
+def continuous(M, lo, hi):
+    """Off-design canvas fill: continuous diverging map with the break at M = 1 (sub: from
+    MACH_CONTINUOUS_SUB[0] at M = 1 to [-1] at lo; super: [0] at M = 1 to [-1] at hi)."""
+    if M <= 1.0:
+        return _ramp(tokens.MACH_CONTINUOUS_SUB, (1.0 - M) / max(1.0 - lo, 1e-9))
+    return _ramp(tokens.MACH_CONTINUOUS_SUPER, (M - 1.0) / max(hi - 1.0, 1e-9))

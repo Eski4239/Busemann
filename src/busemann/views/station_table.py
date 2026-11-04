@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableWidget, QTab
 from ..theme import qt as theme
 from ..theme import tokens
 from ..tooltips import tip
+from ..crashlog import guarded
 
 # (header shown, TSV header, RegionState attribute, format)
 COLUMNS = (
@@ -129,10 +130,12 @@ class StationTable(QTableWidget):
             problems.append(("all", total, self.viewport().width()))
         return problems
 
+    @guarded()
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._fit_columns()
 
+    @guarded()
     def showEvent(self, event):
         super().showEvent(event)
         self._fit_columns()

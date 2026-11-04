@@ -1,5 +1,7 @@
 """File menu and project lifecycle (spec 4.7): New, Open, Save, Save As, Recent, Quit,
-dirty tracking ("•" in the title) and the save prompt."""
+dirty tracking ("•" in the title) and the save prompt. Projects are DXF drawings (M8.2): a
+Busemann DXF reopens exactly; any other DXF is imported from its ramp and cowl lines as an
+untitled custom-angle design with the "flight conditions unknown" banner."""
 from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer, Signal
@@ -11,7 +13,7 @@ from ..inputs import Inputs
 from ..settings import app_settings
 
 MAX_RECENT = 8
-FILTER = "Busemann project (*.busemann)"
+FILTER = P.FILTER
 
 
 class ProjectController(QObject):
@@ -106,6 +108,7 @@ class ProjectController(QObject):
     def start_from(self, inputs, label=None):
         """Start a new untitled design from given inputs (welcome window: preset, example)."""
         self._apply(inputs, dict(P.DEFAULT_VIEW, layers=dict(P.DEFAULT_VIEW["layers"])))
+        self.window.show_banner(None)
         self.path = None
         self.origin = label
         self._set_dirty(False)
@@ -114,11 +117,12 @@ class ProjectController(QObject):
     def open_example(self, path):
         """Load a bundled example as an untitled copy (Save never writes into the app)."""
         try:
-            inputs, view, _ = P.load(path)
+            inputs, view, _ = P.load(path, base=self.state.inputs)
         except P.ProjectError as exc:
             self.show_error(str(exc))
             return False
         self._apply(inputs, view)
+        self.window.show_banner(None)
         self.path = None
         self.origin = f"example {Path(path).stem}"
         self._set_dirty(False)
@@ -152,6 +156,7 @@ class ProjectController(QObject):
         if not self.maybe_save():
             return False
         self._apply(Inputs(), dict(P.DEFAULT_VIEW, layers=dict(P.DEFAULT_VIEW["layers"])))
+        self.window.show_banner(None)
         self.path = None
         self.origin = None
         self._set_dirty(False)
@@ -174,17 +179,28 @@ class ProjectController(QObject):
             return False
         path = Path(path)
         try:
-            inputs, view, warnings = P.load(path)
+            loaded = P.load(path, base=self.state.inputs)
         except P.ProjectError as exc:
             self.show_error(str(exc))
             return False
+        inputs, view, warnings = loaded
         self._apply(inputs, view)
-        self.path = path
-        self.origin = None
-        self._set_dirty(False)
         self._clear_history()
         self._add_recent(path)
         self.settings.setValue("project/last_dir", str(path.parent))
+        if loaded.imported:                # geometry only: an untitled design, never saved over
+            self.path = None
+            self.origin = f"import {path.name}"
+            self._set_dirty(True)
+            self.window.show_banner(P.IMPORT_BANNER)
+            extra = [w for w in warnings if w != P.IMPORT_BANNER]
+            if extra:
+                self.show_warnings(extra)
+            return True
+        self.window.show_banner(None)
+        self.path = path
+        self.origin = None
+        self._set_dirty(False)
         if warnings:
             self.window.statusBar().showMessage(f"Opened {path.name} with {len(warnings)} "
                                                 "warning(s)", 8000)
@@ -198,7 +214,7 @@ class ProjectController(QObject):
 
     def save_as(self):
         start = str(Path(self._last_dir()) / (self.path.name if self.path else
-                                               "untitled.busemann"))
+                                               "untitled.dxf"))
         path, _ = QFileDialog.getSaveFileName(self.window, "Save project", start, FILTER)
         if not path:
             return False
@@ -209,7 +225,8 @@ class ProjectController(QObject):
 
     def _write(self, path):
         try:
-            P.save(path, self.state.inputs, self.view())
+            P.save(path, self.state.inputs, self.view(), design=self.state.design,
+                   metadata=self._metadata())
         except OSError as exc:
             self.show_error(f"Cannot save {path.name}: {exc.strerror or exc}")
             return False
@@ -220,6 +237,13 @@ class ProjectController(QObject):
         self.settings.setValue("project/last_dir", str(self.path.parent))
         self.window.statusBar().showMessage(f"Saved {self.path.name}", 4000)
         return True
+
+    def _metadata(self):
+        from ..export.metadata import metadata
+
+        meta = metadata(self.state.inputs, "Busemann design (DXF)")
+        meta.pop("inputs", None)                     # the inputs are the BUSEMANN_* keys
+        return meta
 
     # --- dialogs (replaced in tests) -------------------------------------------------------
     def show_error(self, text):

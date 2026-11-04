@@ -10,6 +10,7 @@ from ..settings import app_settings
 from ..theme import tokens
 from ..tooltips import tip
 from .overlay import DimOverlay
+from ..crashlog import guarded
 
 CARD_W = 340
 STEPS = (
@@ -17,8 +18,8 @@ STEPS = (
      "Hover a flow region or shock to read its state. Click it to select it; the station "
      "table and the results panel follow."),
     ("explain", "Explain",
-     "Explain opens a drawer with the governing equations, this case's numbers and a "
-     "plain-language note for whatever you selected."),
+     "Explain lists the topics of this design. Click one to read its equations, this "
+     "case's numbers and a plain-language note."),
     ("offdesign", "Off-design",
      "The Off-design tab flies the frozen design at other Mach numbers: spillage, recovery "
      "and the cowl margin along the whole range."),
@@ -89,6 +90,7 @@ class TourOverlay(DimOverlay):
         app_settings().setValue("tour/done", True)
         self.close_overlay()
 
+    @guarded()
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Escape:
             self.skip()

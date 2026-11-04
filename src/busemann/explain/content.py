@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 
 ENTRY_NAMES = ("freestream", "oblique_shock", "region", "normal_shock", "duct", "cowl_design",
-               "cowl_offdesign", "method", "offdesign")
+               "cowl_offdesign", "method", "offdesign", "separation")
 SECTIONS = ("Relations", "This case", "In plain words", "Assumptions")
 
 _TOKEN = re.compile(r"\{\{\s*([^{}:]+?)\s*(?::([^{}]*))?\}\}")

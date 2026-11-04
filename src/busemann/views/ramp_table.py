@@ -76,6 +76,21 @@ class RampTable(QWidget):
                 self._grid.addWidget(cell, r, c)
                 self._cells.append(cell)
 
+    def column_overflow(self):
+        """[(row, column, needed px, available px)] for every visible cell or header whose
+        text is wider than its cell (would be clipped)."""
+        out = []
+        cells = [(0, c, h) for c, h in enumerate(self.headers)]
+        cols = self._columns
+        cells += [(1 + k // cols, k % cols, w) for k, w in enumerate(self._cells)]
+        for r, c, w in cells:
+            if not w.isVisibleTo(self):
+                continue
+            need = w.fontMetrics().horizontalAdvance(w.text())
+            if w.width() < need:
+                out.append((r, c, need, w.width()))
+        return out
+
     def clear(self):
         self.set_rows([])
         self.empty.setText("—")

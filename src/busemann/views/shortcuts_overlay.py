@@ -6,6 +6,7 @@ from ..theme import qt as theme
 from ..theme import tokens
 from ..tooltips import tip
 from .overlay import DimOverlay
+from ..crashlog import guarded
 
 SHORTCUTS = (
     ("F", "Fit the drawing"),
@@ -55,8 +56,10 @@ class ShortcutsOverlay(DimOverlay):
         hint.setToolTip(tip("overlay.shortcuts"))
         v.addWidget(hint)
 
+    @guarded()
     def keyPressEvent(self, event):
         self.close_overlay()
 
+    @guarded()
     def mousePressEvent(self, event):
         self.close_overlay()

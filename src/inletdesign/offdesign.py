@@ -113,7 +113,7 @@ def off_design(geom, M_inf, gamma=1.4, cowl_wedge_deg=0.0):
         except ValueError as exc:
             theta_max, _ = obl.max_deflection(M, gamma)
             raise ValueError(
-                f"shock detached at ramp {i}: θ = {theta:.2f}°, θ_max = {theta_max:.2f}°"
+                f"shock detached at ramp {i}: θ = {theta:.2f}°, θmax = {theta_max:.2f}°"
             ) from exc
         betas.append(state["beta"])
         M = state["M2"]

@@ -24,6 +24,7 @@ def _off(qtbot, win, M):
 
 def _open_tab(qtbot, win):
     win.tabs.setCurrentWidget(win.offdesign_tab)
+    win.offdesign_tab.set_charts_expanded(True)          # collapsed by default (M8.2)
     qtbot.waitUntil(lambda: win.offdesign_tab.canvas.inlet_scene.picture is not None,
                     timeout=3000)
     return win.offdesign_tab
@@ -164,13 +165,17 @@ def test_regime_bands_use_the_wedge(qtbot, window):
                for p in charts.footer_parts)
 
 
-def test_above_design_lip_notice_has_cfd_tooltip(qtbot, window):
+def test_above_design_lip_notice_keeps_cfd_out_of_results(qtbot, window):
+    """M8.2: CFD comparisons are not in the Results panel; the lip notice's CFD note stays
+    available in the Verification tab."""
     _open_tab(qtbot, window)
     _off(qtbot, window, 3.25)
     panel = window.results_panel
     [i] = [k for k, t in enumerate(panel.warning_texts()) if t.startswith("Cowl lip shock")]
-    tip = panel._warning_labels[i].toolTip()
-    assert "Phase 3d CFD" in tip and "Mach reflection" in tip
+    row = panel.warning_rows[i]
+    assert "Phase 3d CFD" not in row.toolTip() + row.body.toolTip()
+    items = window.state.verification_items()
+    assert any("Phase 3d CFD" in it.text for it in items if it.category == "notice")
     # off-design notices are listed only while the off-design view is active
     window.tabs.setCurrentWidget(window.canvas)
     assert not any(t.startswith("Cowl lip shock") for t in panel.warning_texts())
@@ -197,13 +202,15 @@ def _drag(qtbot, window, steps=60, measure=False):
     import gc
 
     tab = _open_tab(qtbot, window)
+    was_enabled = gc.isenabled()          # the app's GC guard keeps it off (GUI-thread GC)
     if measure:
         _quiesce(window)
         gc.disable()
     try:
         return _drag_steps(qtbot, window, tab, steps)
     finally:
-        gc.enable()
+        if was_enabled:
+            gc.enable()
 
 
 def _drag_steps(qtbot, window, tab, steps):
@@ -252,7 +259,7 @@ def test_slider_drag_stays_responsive(qtbot, window):
 
 # --- M5 STEP 0: results panel follows the slider Mach on this tab ---------------------
 
-def test_kpis_show_slider_mach_values_with_deltas(qtbot, window):
+def test_kpis_show_slider_mach_values_without_deltas(qtbot, window):
     panel = window.results_panel
     design_text = panel.cards["recovery_total"].text()
     assert panel.title.text().upper() == "RESULTS"
@@ -263,17 +270,14 @@ def test_kpis_show_slider_mach_values_with_deltas(qtbot, window):
     cards = panel.cards
     assert panel.title.text() == "Results at M∞ 2.50"
     assert cards["recovery_total"].text() == f"{off.recovery_total:.4f}"
-    assert cards["recovery_total"].delta_label.text() == \
-        f"Δ vs design {off.recovery_total - d.recovery_total:+.4f}"
-    assert cards["recovery_oblique"].text() == f"{off.recovery_oblique:.4f}"
     assert cards["M_duct"].text() == f"{off.M_post_terminal:.3f}"
     assert cards["mass_capture"].text() == f"{off.mass_capture_ratio:.3f}"
-    assert cards["mass_capture"].delta_label.text() == \
-        f"Δ vs design {off.mass_capture_ratio - 1.0:+.3f}"
+    assert cards["cowl_margin"].text() == f"{off.cowl_margin_deg:+.2f}"
+    # M8.2: no "Δ vs design" lines (the "At slider Mach" card has those)
+    assert not any(c.delta_label.isVisibleTo(window) for c in cards.values())
     fs = api.freestream(2.5, altitude_m=window.state.inputs.altitude_m)
     mdot = api.captured_mass_flow(fs, 0.1, off.mass_capture_ratio)
     assert window.state.captured_mass_flow(True) == pytest.approx(mdot)
-    assert cards["mass_flow"].delta_label.isVisibleTo(window)
     # back on the Design tab: design values, no delta lines
     window.tabs.setCurrentWidget(window.canvas)
     assert panel.title.text().upper() == "RESULTS"
@@ -283,10 +287,11 @@ def test_kpis_show_slider_mach_values_with_deltas(qtbot, window):
 
 def test_warnings_grouped_by_design_point_and_slider_mach(qtbot, window):
     panel = window.results_panel
-    assert panel.notice_groups() == ["Design point"]
+    assert panel.notice_groups() == ["At the design point (M∞ 3.00)"]
     _open_tab(qtbot, window)
     _off(qtbot, window, 3.25)
-    assert panel.notice_groups() == ["Design point", "At M∞ 3.25"]
+    assert panel.notice_groups() == ["At the design point (M∞ 3.00)",
+                                     "At M∞ 3.25 (off-design)"]
     design_texts = [n[2] for n in window.state.notices() if n[0] == "design"]
     assert any(t.startswith("Cowl near shock detachment (margin 0.28°)") for t in design_texts)
     off = [n for n in window.state.notices() if n[0] == "off"]
@@ -295,7 +300,7 @@ def test_warnings_grouped_by_design_point_and_slider_mach(qtbot, window):
     _off(qtbot, window, 2.0)                       # detached ramp shock: error in "off"
     assert "error" in panel.card_levels("off")
     window.tabs.setCurrentWidget(window.canvas)
-    assert panel.notice_groups() == ["Design point"]
+    assert panel.notice_groups() == ["At the design point (M∞ 3.00)"]
 
 
 def test_status_bar_splits_design_and_sweep_time(window):

@@ -28,11 +28,19 @@ def welcome(qtbot):
     return dialog
 
 
-def test_cards_in_spec_order(welcome):
-    assert [t for t, _ in welcome.cards] == ["Validation case", "Concorde cruise", "XB-70",
-                                            "SR-71", "X-15 record", "Blank (defaults)"]
+def test_sections_new_design_examples_recent(welcome):
+    """M8.2: "New design" = validation case + blank; "Examples" = the four flight presets
+    plus the bundled example designs, one list; "Recent"."""
+    assert [t for t, _ in welcome.cards] == ["Validation case", "Blank (defaults)"]
     assert "M 3.00 · 10.0 kPa, 220 K" in welcome.cards[0][1].text()
-    assert welcome.example_list.count() == 3
+    items = [welcome.example_list.item(k) for k in range(welcome.example_list.count())]
+    titles = [it.text().splitlines()[0] for it in items]
+    assert titles[:4] == ["Concorde cruise", "XB-70", "SR-71", "X-15 record"]
+    assert len(titles) == 7
+    kinds = [it.data(Qt.ItemDataRole.UserRole)[0] for it in items]
+    assert kinds == ["preset"] * 4 + ["example"] * 3
+    assert all(it.data(Qt.ItemDataRole.UserRole)[1].endswith(".dxf") for it in items[4:])
+    assert not hasattr(welcome, "startup_check")            # "Show at startup" removed
 
 
 def test_tour_box_checked_on_first_launch_only(qtbot, welcome):
@@ -44,21 +52,22 @@ def test_tour_box_checked_on_first_launch_only(qtbot, welcome):
 
 
 def test_recent_rows_show_mach_ramps_and_date(qtbot, tmp_path):
-    path = tmp_path / "wing.busemann"
+    path = tmp_path / "wing.dxf"
     P.save(path, Inputs(mach=2.4, n_ramps=3), None)
-    app_settings().setValue("project/recent", [str(path), str(tmp_path / "gone.busemann")])
+    app_settings().setValue("project/recent", [str(path), str(tmp_path / "gone.dxf")])
     dialog = W.WelcomeDialog()
     qtbot.addWidget(dialog)
     first = dialog.recent_list.item(0).text()
-    assert first.startswith("wing.busemann\nM 2.40 · 3 ramps · 20")
+    assert first.startswith("wing.dxf\nM 2.40 · 3 ramps · 20")
     gone = dialog.recent_list.item(1)
     assert "cannot be read" in gone.text() and not gone.flags() & Qt.ItemFlag.ItemIsEnabled
 
 
 @pytest.mark.parametrize("pick, expected", [
     (lambda d: d.cards[0][1].click(), ("preset", "Validation case")),
-    (lambda d: d.cards[5][1].click(), ("blank",)),
-    (lambda d: d._activated(d.example_list.item(1)), ("example",)),
+    (lambda d: d.cards[1][1].click(), ("blank",)),
+    (lambda d: d._activated(d.example_list.item(1)), ("preset", "XB-70")),
+    (lambda d: d._activated(d.example_list.item(5)), ("example",)),
     (lambda d: d.reject(), None),
 ])
 def test_each_choice(welcome, pick, expected):
@@ -77,7 +86,7 @@ def test_choices_are_applied_to_the_main_window(qtbot, window):
     from busemann.paths import resource_path
     with qtbot.waitSignal(window.state.design_ready, timeout=5000):
         W.apply_choice(window, ("example", str(resource_path("examples",
-                                                             "x15_four_ramp.busemann"))))
+                                                             "x15_four_ramp.dxf"))))
     assert window.state.inputs.mach == 6.7 and window.project.path is None
     assert "from example x15_four_ramp" in window.windowTitle()
     before = window.state.inputs
@@ -86,7 +95,7 @@ def test_choices_are_applied_to_the_main_window(qtbot, window):
 
 
 def test_drop_on_welcome_opens_the_file(welcome, tmp_path):
-    path = tmp_path / "d.busemann"
+    path = tmp_path / "d.dxf"
     P.save(path, Inputs(), None)
     mime = QMimeData()
     mime.setUrls([QUrl.fromLocalFile(str(path))])
@@ -112,7 +121,7 @@ def test_main_shows_welcome_unless_a_path_is_given(qtbot, monkeypatch, tmp_path)
     assert shown == [1] and w.isVisible()
     qtbot.waitUntil(lambda: w.state.inputs.mach == 3.0 and w.state.inputs.preset == "XB-70",
                     timeout=3000)
-    path = tmp_path / "x.busemann"
+    path = tmp_path / "x.dxf"
     P.save(path, Inputs(mach=2.2), None)
     assert app_module.main([str(path)]) == 0
     w2 = windows[-1]
@@ -167,24 +176,19 @@ def test_skip_stores_done_and_help_reopens(qtbot, window):
 
 # --- M8 restyle ------------------------------------------------------------------------------
 
-def test_header_thumbnail_is_drawn_from_the_validation_picture(welcome):
-    from inletdesign import api
+def test_header_shows_the_3d_render(welcome):
+    from busemann.paths import resource_path
 
-    from busemann.canvas import picture as Pic
-
-    pic = Pic.build(Pic.skeleton_from(api.design(3.0, 2)))
-    thumb = welcome.thumbnail
-    assert [s.start for s in thumb.picture.shocks] == [s.start for s in pic.shocks]
-    assert len(thumb.region_fills) == len(pic.regions)
-    image = thumb.grab().toImage()
-    assert image.width() > 0 and len({image.pixel(x, image.height() // 2)
-                                      for x in range(0, image.width(), 4)}) > 3
+    assert resource_path("images", "inlet_3d.png").is_file()
+    assert not welcome.pixmap.isNull() and welcome.pixmap.width() > 400
+    shown = welcome.image.pixmap()
+    assert shown is not None and not shown.isNull()
 
 
 def test_cards_are_title_plus_mono_subtitle_and_focusable(qtbot, welcome):
     from busemann.theme import qt as theme
 
-    name, card = welcome.cards[1]
+    name, card = welcome.cards[0]
     assert card.title_label.text() == name and card.title_label.font().weight() == 500
     assert card.sub_label.font().family() == theme.mono_family()
     assert card.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
@@ -198,27 +202,3 @@ def test_recent_empty_state(welcome):
     assert not welcome.recent_list.isVisibleTo(welcome)
     assert welcome.recent_empty.isVisibleTo(welcome)
     assert welcome.recent_empty.text() == W.RECENT_EMPTY
-
-
-def test_show_at_startup_defaults_on_and_off_skips_the_window(qtbot, monkeypatch):
-    import busemann.app as app_module
-
-    first = W.WelcomeDialog()
-    qtbot.addWidget(first)
-    assert first.startup_check.isChecked() and W.show_at_startup()
-    first.startup_check.setChecked(False)
-    first.reject()
-    assert not W.show_at_startup()
-    shown, windows = [], []
-    monkeypatch.setattr(W.WelcomeDialog, "exec", lambda self: shown.append(1))
-    monkeypatch.setattr(app_module.QApplication, "exec", lambda self: 0)
-    real = app_module.MainWindow
-    monkeypatch.setattr(app_module, "MainWindow",
-                        lambda *a, **k: windows.append(real(*a, **k)) or windows[-1])
-    assert app_module.main([]) == 0
-    w = windows[-1]
-    qtbot.addWidget(w)
-    assert shown == [] and w.isVisible()
-    w.project.ask_save = lambda: "discard"
-    w.close()
-    w.state.shutdown()

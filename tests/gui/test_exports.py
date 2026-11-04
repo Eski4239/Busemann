@@ -28,11 +28,16 @@ def test_every_export_action_writes_a_file(qtbot, window, tmp_path):
         action.trigger()
     files = sorted(p.name for p in tmp_path.iterdir() if p.suffix != ".ini")
     assert files == sorted(names + ["verification_notes.md"])   # beside the DXFs (M8)
-    assert names[:3] == ["busemann_M3.00_2ramp_geometry.dxf",
+    assert names[:6] == ["busemann_M3.00_2ramp_geometry.dxf",
+                         "busemann_M3.00_2ramp_geometry.igs",
+                         "busemann_M3.00_2ramp_wall_points.csv",
+                         "busemann_M3.00_2ramp_geometry.geo",
                          "busemann_M3.00_2ramp_cfd_domain.dxf",
                          "busemann_M3.00_2ramp_cfd_offdesign_v2.dxf"]
     assert "busemann_M3.00_2ramp_design.png" in names
-    for name in names[:3]:
+    geometry = dict(ezdxf.readfile(tmp_path / names[0]).header.custom_vars)
+    assert geometry["app"] == "Busemann" and geometry["BUSEMANN_MACH"] == "3.0"  # reopens
+    for name in names[4:6]:
         props = dict(ezdxf.readfile(tmp_path / name).header.custom_vars)
         assert props["app"] == "Busemann" and "inputs" in props
     data = json.loads((tmp_path / "busemann_M3.00_2ramp_results.json").read_text("utf-8"))

@@ -33,7 +33,7 @@ RIGHT_PANEL_WIDTH = 320
 MIN_WINDOW = (1280, 800)
 
 DEBOUNCE_MS = 30
-OFFDESIGN_STRIP_H = 272   # px, chart strip under the off-design canvas
+OFFDESIGN_STRIP_H = 440   # px, chart strip under the off-design canvas (when expanded)
 
 
 def space(n=1):
@@ -47,6 +47,11 @@ def space(n=1):
 # Supersonic: light -> darker blue with Mach (interpolated across the supersonic bins).
 MACH_SUBSONIC = ("#F7F0E5", "#E6D2B5")   # CIEDE2000 9.6 apart (test: >= 8)
 MACH_SUPERSONIC = ("#E9F0F8", "#D3E1F1", "#BCD0E9", "#A4BFE0", "#8DAED7")
+# Off-design canvas (M8.2): continuous, higher-contrast diverging map at M = 1.
+# Subsonic stops from M = 1 down to the low end; supersonic stops from M = 1 up to the top.
+MACH_CONTINUOUS_SUB = ("#FDDBC7", "#E58267", "#B2182B")
+MACH_CONTINUOUS_SUPER = ("#D1E5F0", "#92C5DE", "#4393C3", "#2166AC", "#0B3A75")
+MACH_CONTINUOUS_LO = 0.3     # bottom of the off-design colour scale
 REGION_BORDER_DARKER = 112   # QColor.darker() factor for the 1 px region outline
 LEGEND_INSET_PX = 16
 LEGEND_ALPHA = 0.9

@@ -1,26 +1,30 @@
-"""Welcome window (addendum A/B1, restyled in M8): modal, before the main window.
+"""Welcome window (addendum A/B1; M8.2 layout): modal, before the main window.
 
-Left header column: "Busemann", tagline, version and a small inlet drawn from the validation
-design's picture data (no image file). Right: "New design" preset cards, Open…, Recent (8)
-with design Mach, ramps and date, and the bundled examples. Bottom: "Show tour" (checked on
-the first launch only) and "Show at startup" (default on; off skips this window).
+Left header: "Busemann", tagline, version and a 3D render of a generic two-ramp inlet
+(resources/images/inlet_3d.png, made offline by tools/render_inlet_3d.py). Right:
+- "New design": the validation case and a blank design;
+- "Examples": the flight presets (Concorde cruise, XB-70, SR-71, X-15 record) and the bundled
+  example designs, one list;
+- "Recent" (8) with design Mach, ramps and date, and Open…
+"Show tour" is checked on the first launch only.
 `choice` after exec(): ("preset", name) | ("blank",) | ("open", path) | ("example", path) | None
 (Esc / close: the default design).
 """
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QListWidget,
-    QListWidgetItem, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
+    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from inletdesign.presets import get as get_preset
 
 from .. import __version__
 from .. import project as P
+from ..crashlog import guarded
 from ..paths import resource_path
 from ..settings import app_settings
 from ..theme import qt as theme
@@ -28,18 +32,16 @@ from ..theme import tokens
 from ..tooltips import tip
 from ..widgets import section_title
 
-PRESET_ORDER = ("Validation case", "Concorde cruise", "XB-70", "SR-71", "X-15 record")
-EXAMPLES = (("validation_case", "Validation case", "M 3.00 · 2 ramps · Phase 3 CFD freestream"),
-            ("x15_four_ramp", "X-15, 4 ramps", "M 6.70 · real-gas warning"),
+NEW_DESIGNS = (("Validation case", ("preset", "Validation case")),
+               ("Blank (defaults)", ("blank",)))
+EXAMPLE_PRESETS = ("Concorde cruise", "XB-70", "SR-71", "X-15 record")
+EXAMPLES = (("validation_case", "Validation case design", "M 3.00 · 2 ramps · Phase 3 CFD"),
+            ("x15_four_ramp", "X-15 conditions, 4 ramps", "M 6.70 · real-gas warning"),
             ("m3_cowl_constrained", "Cowl-constrained M3", "M 3.00 · 3 ramps · max cowl 30°"))
 MAX_RECENT = 8
-RECENT_EMPTY = "No recent projects yet. Open a .busemann file or start from a preset."
-SHOW_KEY = "welcome/show"
-
-
-def show_at_startup():
-    """The "Show at startup" setting (default on)."""
-    return app_settings().value(SHOW_KEY, True, type=bool)
+RECENT_EMPTY = "No recent designs yet. Open a DXF or start from a new design."
+IMAGE = ("images", "inlet_3d.png")
+HEADER_W = 320
 
 
 def preset_subtitle(name):
@@ -50,80 +52,22 @@ def preset_subtitle(name):
 
 
 def recent_entry(path):
-    """(title, subtitle, readable) for a recent project file."""
+    """(title, subtitle, readable) for a recent design file."""
     path = Path(path)
     try:
-        inputs, _, _ = P.load(path)
+        loaded = P.load(path)
+        inputs = loaded[0]
         date = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
         ramps = f"{inputs.n_ramps} ramp" + ("s" if inputs.n_ramps != 1 else "")
-        return path.name, f"M {inputs.mach:.2f} · {ramps} · {date}", True
+        what = "imported geometry · " if loaded.imported else f"M {inputs.mach:.2f} · "
+        return path.name, f"{what}{ramps} · {date}", True
     except (P.ProjectError, OSError):
         return path.name, "cannot be read", False
 
 
-class InletThumbnail(QWidget):
-    """The validation design (M 3, 2 ramps; the geometry does not depend on p, T) drawn from
-    its picture data: Mach-class region fills, walls, amber shocks. QPainter, no image file."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        from inletdesign import api
-
-        from ..canvas import colors as Col
-        from ..canvas import picture as Pic
-
-        self.setObjectName("inletThumbnail")
-        self.setToolTip(tip("welcome.thumbnail"))
-        self.setMinimumSize(QSize(tokens.space(24), tokens.space(14)))
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-        self.picture = Pic.build(Pic.skeleton_from(api.design(3.0, 2)))
-        regions = self.picture.regions
-        edges = Pic.mach_bins(min(r.state.M for r in regions), self.picture.skeleton.regions[0].M)
-        fills = Col.bin_colors(edges)
-        self.region_fills = [fills[Pic.bin_index(r.state.M, edges)] for r in regions]
-
-    def sizeHint(self):
-        return QSize(tokens.space(26), tokens.space(15))
-
-    def _transform(self):
-        x0, y0, x1, y1 = self.picture.bounds()
-        pad = 2
-        w, h = self.width() - 2 * pad, self.height() - 2 * pad
-        s = min(w / (x1 - x0), h / (y1 - y0))
-        ox = pad + (w - s * (x1 - x0)) / 2 - s * x0
-        oy = pad + (h - s * (y1 - y0)) / 2 + s * y1
-        return lambda p: QPointF(ox + s * p[0], oy - s * p[1])
-
-    def paintEvent(self, event):
-        to = self._transform()
-        pic = self.picture
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(Qt.PenStyle.NoPen)
-        for region, fill in zip(pic.regions, self.region_fills):
-            painter.setBrush(QColor(fill))
-            painter.drawPolygon(QPolygonF([to(p) for p in region.polygon]))
-        wall = QColor(tokens.COLORS["wall"])
-        painter.setBrush(wall)
-        painter.drawPolygon(QPolygonF([to(p) for p in pic.cowl_body]))
-        path = QPainterPath(to(pic.ramp_surface[0]))
-        for p in pic.ramp_surface[1:]:
-            path.lineTo(to(p))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.setPen(QPen(wall, 2.0))
-        painter.drawPath(path)
-        for shock in pic.shocks:
-            pen = QPen(QColor(tokens.COLORS["shock"]), 1.5)
-            if shock.kind == "normal":
-                pen.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.drawLine(to(shock.start), to(shock.end))
-        painter.end()
-
-
 class PresetCard(QFrame):
-    """Preset card: left-aligned title (Inter Medium) over a JetBrains Mono subtitle; 1 px
-    border, accent on hover and on keyboard focus; click, Enter or Space activates."""
+    """Card: left-aligned title (Inter Medium) over a JetBrains Mono subtitle; 1 px border,
+    accent on hover and on keyboard focus; click, Enter or Space activates."""
 
     clicked = Signal()
 
@@ -155,12 +99,14 @@ class PresetCard(QFrame):
     def click(self):
         self.clicked.emit()
 
+    @guarded()
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton and \
                 self.rect().contains(event.position().toPoint()):
             self.clicked.emit()
         super().mouseReleaseEvent(event)
 
+    @guarded()
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
             self.clicked.emit()
@@ -174,7 +120,7 @@ class WelcomeDialog(QDialog):
         self.setObjectName("welcomeDialog")
         self.setWindowTitle("Busemann")
         self.setModal(True)
-        self.resize(940, 580)
+        self.resize(980, 600)
         self.setAcceptDrops(True)
         self.choice = None
         self.settings = app_settings()
@@ -192,43 +138,34 @@ class WelcomeDialog(QDialog):
                                 tokens.space(2))
         main.setSpacing(tokens.space(1))
         main.addWidget(section_title("New design", "section.welcome_new"))
-        grid = QGridLayout()
-        grid.setSpacing(tokens.space(1))
+        row = QHBoxLayout()
+        row.setSpacing(tokens.space(1))
         self.cards = []
-        cards = [(name, preset_subtitle(name), ("preset", name)) for name in PRESET_ORDER]
-        cards.append(("Blank (defaults)", "M 3.00 · 20.0 km", ("blank",)))
-        for k, (name, sub, choice) in enumerate(cards):
+        for name, choice in NEW_DESIGNS:
+            sub = preset_subtitle(name) if choice[0] == "preset" else "M 3.00 · 20.0 km"
             card = PresetCard(name, sub)
             card.clicked.connect(lambda c=choice: self._choose(c))
-            grid.addWidget(card, k // 3, k % 3)
+            row.addWidget(card, 1)
             self.cards.append((name, card))
-        main.addLayout(grid)
+        main.addLayout(row)
         main.addSpacing(tokens.space(2))
 
         lists = QHBoxLayout()
         lists.setSpacing(tokens.space(2))
-        lists.addLayout(self._recent_column(), 1)
         lists.addLayout(self._example_column(), 1)
+        lists.addLayout(self._recent_column(), 1)
         main.addLayout(lists, 1)
 
         first_launch = not self.settings.value("welcome/launched", False, type=bool)
         self.tour_check = QCheckBox("Show tour")
         self.tour_check.setToolTip(tip("welcome.tour"))
         self.tour_check.setChecked(first_launch)
-        self.startup_check = QCheckBox("Show at startup")
-        self.startup_check.setToolTip(tip("welcome.show_startup"))
-        self.startup_check.setChecked(show_at_startup())
-        bottom = QHBoxLayout()
-        bottom.setSpacing(tokens.space(2))
-        bottom.addWidget(self.tour_check)
-        bottom.addWidget(self.startup_check)
-        bottom.addStretch(1)
-        main.addLayout(bottom)
+        main.addWidget(self.tour_check)
 
     def _header(self):
         header = QFrame()
         header.setObjectName("welcomeHeader")
-        header.setFixedWidth(tokens.space(32))
+        header.setFixedWidth(HEADER_W)
         head = QVBoxLayout(header)
         head.setContentsMargins(tokens.space(3), tokens.space(4), tokens.space(3),
                                 tokens.space(2))
@@ -244,22 +181,52 @@ class WelcomeDialog(QDialog):
         version.setObjectName("welcomeVersion")
         version.setFont(theme.mono_font(tokens.SIZE_LABEL))
         version.setToolTip(tip("welcome.version"))
-        self.thumbnail = InletThumbnail()
-        caption = QLabel("Validation case · M 3.00 · 2 ramps")
+        self.image = QLabel()
+        self.image.setObjectName("inletImage")
+        self.image.setToolTip(tip("welcome.thumbnail"))
+        self.pixmap = QPixmap(str(resource_path(*IMAGE)))
+        width = HEADER_W - 2 * tokens.space(3)
+        if not self.pixmap.isNull():
+            dpr = self.devicePixelRatioF() or 1.0
+            scaled = self.pixmap.scaledToWidth(round(width * dpr),
+                                               Qt.TransformationMode.SmoothTransformation)
+            scaled.setDevicePixelRatio(dpr)
+            self.image.setPixmap(scaled)
+        self.image.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        caption = QLabel("A generic two-ramp inlet: the validation geometry, extruded")
         caption.setObjectName("muted")
+        caption.setWordWrap(True)
         caption.setToolTip(tip("welcome.thumbnail"))
-        hint = QLabel("Esc opens the default design. You can also drop a .busemann file here.")
+        hint = QLabel("Esc opens the default design. You can also drop a DXF here.")
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         hint.setToolTip(tip("welcome.hint"))
         for w in (title, tagline, version):
             head.addWidget(w)
         head.addSpacing(tokens.space(4))
-        head.addWidget(self.thumbnail)
+        head.addWidget(self.image)
         head.addWidget(caption)
         head.addStretch(1)
         head.addWidget(hint)
         return header
+
+    def _example_column(self):
+        col = QVBoxLayout()
+        top = QHBoxLayout()
+        top.addWidget(section_title("Examples", "section.welcome_examples"))
+        top.addStretch(1)
+        spacer = QWidget()                       # aligns the list with the Recent list
+        spacer.setFixedSize(QSize(1, QPushButton("Open…").sizeHint().height()))
+        top.addWidget(spacer)
+        col.addLayout(top)
+        self.example_list = self._list("welcome.example")
+        for name in EXAMPLE_PRESETS:
+            self._item(self.example_list, name, preset_subtitle(name), ("preset", name))
+        for stem, name, sub in EXAMPLES:
+            self._item(self.example_list, name, sub,
+                       ("example", str(resource_path("examples", f"{stem}.dxf"))))
+        col.addWidget(self.example_list, 1)
+        return col
 
     def _recent_column(self):
         col = QVBoxLayout()
@@ -290,29 +257,9 @@ class WelcomeDialog(QDialog):
         self.recent_empty.setVisible(not recent)
         if recent:
             col.addWidget(self.recent_list, 1)
-        else:                                   # short empty state, top-aligned
+        else:                                    # short empty state, top-aligned
             col.addWidget(self.recent_empty)
             col.addStretch(1)
-        return col
-
-    def _example_column(self):
-        col = QVBoxLayout()
-        top = QHBoxLayout()
-        top.addWidget(section_title("Examples", "section.welcome_examples"))
-        top.addStretch(1)
-        spacer = QWidget()                      # aligns the list with the Recent list
-        spacer.setFixedHeight(self.open_button.sizeHint().height())
-        spacer.setFixedWidth(1)
-        top.addWidget(spacer)
-        col.addLayout(top)
-        self.example_list = self._list("welcome.example")
-        for stem, name, sub in EXAMPLES:
-            self._item(self.example_list, name, sub,
-                       ("example", str(resource_path("examples", f"{stem}.busemann"))))
-        rows = self.example_list.sizeHintForRow(0) * self.example_list.count()
-        self.example_list.setFixedHeight(rows + 2 * self.example_list.frameWidth() + 2)
-        col.addWidget(self.example_list)
-        col.addStretch(1)
         return col
 
     def _list(self, tip_key):
@@ -337,8 +284,7 @@ class WelcomeDialog(QDialog):
 
     def _open(self):
         start = str(self.settings.value("project/last_dir", str(Path.home())))
-        path, _ = QFileDialog.getOpenFileName(self, "Open project", start,
-                                              "Busemann project (*.busemann)")
+        path, _ = QFileDialog.getOpenFileName(self, "Open design", start, P.FILTER)
         if path:
             self._choose(("open", path))
 
@@ -348,27 +294,28 @@ class WelcomeDialog(QDialog):
 
     def done(self, result):
         self.settings.setValue("welcome/launched", True)
-        self.settings.setValue(SHOW_KEY, self.startup_check.isChecked())
         super().done(result)
 
     def reject(self):
         self.choice = None
         super().reject()
 
-    # --- drop a project file -------------------------------------------------------------
+    # --- drop a design file ---------------------------------------------------------------
     @staticmethod
     def _dropped(mime):
         urls = [u for u in mime.urls() if u.isLocalFile()] if mime.hasUrls() else []
-        if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".busemann"):
+        if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".dxf"):
             return urls[0].toLocalFile()
         return None
 
+    @guarded()
     def dragEnterEvent(self, event):
         if self._dropped(event.mimeData()):
             event.acceptProposedAction()
         else:
             event.ignore()
 
+    @guarded()
     def dropEvent(self, event):
         path = self._dropped(event.mimeData())
         if path:

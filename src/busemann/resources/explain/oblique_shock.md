@@ -1,17 +1,17 @@
 # Ramp shock {{k}}
 
 ## Relations
-<!-- SOURCE: NACA Report 1135 (1953), p. 621, 'Useful relations' paragraph ('Because an oblique shock wave acts as a normal shock...'): the normal component is M1 sin(beta); NACA writes theta for the shock angle, our beta -->
+<!-- SOURCE: NACA Report 1135 (1953), p. 621, 'Useful relations' paragraph ('Because an oblique shock wave acts as a normal shock...'): the normal component is M₁ sin β; NACA writes θ for the shock angle, our β -->
 $$ M_{n1} = M_1 \sin\beta $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (139a), p. 621, with NACA's theta (shock angle) written beta and delta (deflection) written theta -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (139a), p. 621, with NACA's θ (shock angle) written β and δ (deflection) written θ -->
 $$ \tan\theta = 2\cot\beta\;\frac{M_1^2 \sin^2\beta - 1}{M_1^2(\gamma + \cos 2\beta) + 2} $$
 <!-- SOURCE: NACA Report 1135 (1953), eq. (128), p. 621 -->
 $$ \frac{p_2}{p_1} = \frac{2\gamma M_1^2 \sin^2\beta - (\gamma - 1)}{\gamma + 1} $$
 <!-- SOURCE: NACA Report 1135 (1953), eq. (96), p. 619, applied to the normal components as stated on p. 621 -->
 $$ M_{n2}^2 = \frac{(\gamma - 1) M_{n1}^2 + 2}{2\gamma M_{n1}^2 - (\gamma - 1)} $$
-<!-- SOURCE: NACA Report 1135 (1953), p. 621, 'Useful relations' paragraph ('Because an oblique shock wave acts as a normal shock...'): downstream normal component M2 sin(beta - theta) -->
+<!-- SOURCE: NACA Report 1135 (1953), p. 621, 'Useful relations' paragraph ('Because an oblique shock wave acts as a normal shock...'): downstream normal component M₂ sin(β − θ) -->
 $$ M_2 = \frac{M_{n2}}{\sin(\beta - \theta)} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (99), p. 619, with M1 replaced by M1 sin(beta) (p. 621) -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (99), p. 619, with M₁ replaced by M₁ sin β (p. 621) -->
 $$ \frac{p_{02}}{p_{01}} = \left[\frac{(\gamma + 1) M_{n1}^2}{(\gamma - 1) M_{n1}^2 + 2}\right]^{\frac{\gamma}{\gamma - 1}} \left[\frac{\gamma + 1}{2\gamma M_{n1}^2 - (\gamma - 1)}\right]^{\frac{1}{\gamma - 1}} $$
 
 ## This case

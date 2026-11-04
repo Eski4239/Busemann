@@ -347,7 +347,7 @@ def test_one_notice_card_per_severity_in_order(qtbot, window):
     assert panel.warning_texts() == ["An error", "First warning", "Second warning", "A note"]
     assert panel.warning_levels() == ["error", "warn", "warn", "info"]
     assert panel.warnings_box.property("level") == "error"
-    assert panel._warning_labels[0].toolTip() == "why"
+    assert "why" not in panel.warning_rows[0].toolTip()     # details: Verification tab (M8.2)
     panel._set_warnings([])
     assert panel.card_levels() == [] and not panel.warnings_box.isVisibleTo(window)
 

@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from inletdesign import api
 
 from .inputs import Inputs, freestream_for, preset_changes, sized_capture_height  # noqa: F401
+from .crashlog import guarded
 from .theme import tokens
 
 OFF_DESIGN_MIN_MACH = 1.2        # off-design slider lower end
@@ -46,6 +47,22 @@ class _WorkerSignals(QObject):
     done = Signal(int, object)      # generation, payload dict
 
 
+def _safe_run(job, body):
+    """Run a job body; any unexpected exception becomes an error result (logged)."""
+    try:
+        body()
+    except Exception as exc:                       # noqa: BLE001 (logged, reported)
+        import sys
+
+        from .crashlog import log_exception
+
+        log_exception(type(job).__name__, *sys.exc_info())
+        job.signals.done.emit(job.generation, dict(
+            design=None, error=f"internal error: {exc}", off=None, off_error=None, sweep=None,
+            cached=False, demand=None, gap=None, sensitivity=None, ms=0.0, design_ms=0.0,
+            sweep_ms=None, failed=True))
+
+
 class _DesignJob(QRunnable):
     def __init__(self, generation, state, inputs, capture_height, light=False):
         super().__init__()
@@ -55,6 +72,9 @@ class _DesignJob(QRunnable):
         self.signals = _WorkerSignals()
 
     def run(self):
+        _safe_run(self, self._run)
+
+    def _run(self):
         if self.generation != self.state._generation:   # superseded while queued: skip work
             self.signals.done.emit(self.generation, None)
             return
@@ -116,6 +136,9 @@ class _OffDesignJob(QRunnable):
         self.signals = _WorkerSignals()
 
     def run(self):
+        _safe_run(self, self._run)
+
+    def _run(self):
         if self.generation != self.state._off_generation:
             self.signals.done.emit(self.generation, None)
             return
@@ -176,6 +199,7 @@ class AppState(QObject):
     def inputs(self):
         return self._inputs
 
+    @guarded()
     def update(self, **changes):
         """Change inputs; schedules a debounced recompute unless only display fields changed.
 
@@ -197,6 +221,7 @@ class AppState(QObject):
         else:
             self._timer.start()
 
+    @guarded()
     def load_inputs(self, inputs):
         """Replace every input at once (project open / New) and recompute everything."""
         self._timer.stop()
@@ -211,6 +236,7 @@ class AppState(QObject):
             return self._inputs.off_design_mach
         return self.design.inputs.M if self.design is not None else self._inputs.mach
 
+    @guarded()
     def set_dragging(self, dragging):
         """A Mach slider drag starts/ends (expensive views wait for the end)."""
         if dragging != self.dragging:
@@ -343,6 +369,7 @@ class AppState(QObject):
         return self._busy
 
     # --- pipeline -------------------------------------------------------
+    @guarded()
     def recompute_now(self):
         self._timer.stop()
         self._off_timer.stop()
@@ -367,6 +394,7 @@ class AppState(QObject):
         self._set_busy(True)
         self._pool.start(job)
 
+    @guarded()
     def recompute_off_design_now(self):
         """Evaluate the frozen design at the current off-design Mach (worker thread)."""
         self._off_timer.stop()
@@ -378,6 +406,7 @@ class AppState(QObject):
         self._off_jobs[self._off_generation] = job
         self._pool.start(job)
 
+    @guarded()
     def _on_design_done(self, generation, out):
         self._jobs.pop(generation, None)
         if generation != self._generation or out is None:
@@ -396,6 +425,7 @@ class AppState(QObject):
         self.off_design_ready.emit(self.off_design, self.off_design_error)
         self.compute_time_changed.emit(self.compute_ms)
 
+    @guarded()
     def _on_off_design_done(self, generation, out):
         self._off_jobs.pop(generation, None)
         if generation != self._off_generation or out is None or out["design"] is not self.design:

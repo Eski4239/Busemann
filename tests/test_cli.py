@@ -96,7 +96,7 @@ def test_help_exits_zero():
 
 
 def test_offdesign_output_survives_a_cp1252_pipe():
-    """Cowl warnings contain θ_max / M∞; piped Windows stdout (cp1252) must not crash."""
+    """Cowl warnings contain θmax / M∞; piped Windows stdout (cp1252) must not crash."""
     import os
     import subprocess
     import sys

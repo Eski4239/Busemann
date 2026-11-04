@@ -24,14 +24,16 @@ def test_tabs_and_badge(qtbot, window):
     assert tabs.tabText(1) == (f"Verification ({n2})" if n2 else "Verification")
 
 
-def test_separation_notices_in_results_quote_phase_3b(window):
+def test_separation_notices_in_results_without_sources(window):
+    """M8.2: the Results panel shows the warning; the source and the Phase 3b quote are in
+    the Verification tab."""
     texts = window.results_panel.warning_texts()
     sep = [t for t in texts if t.startswith("Shock-induced separation likely")]
     assert len(sep) == 2 and all("approximate — verify with CFD" in t for t in sep)
-    labels = [lab for lab in window.results_panel._warning_labels
-              if lab.text().replace(" ", " ").startswith("Shock-induced separation "
-                                                              "likely at ramp shock 2")]
-    assert "15.5 mm" in labels[0].toolTip() and "validation_3b.md" in labels[0].toolTip()
+    assert not any("Korkegi" in t for t in texts)
+    items = window.state.verification_items()
+    r2 = next(i for i in items if i.title.startswith("Ramp shock 2"))
+    assert "15.5 mm" in r2.quote and "Korkegi" in r2.source
 
 
 @pytest.mark.parametrize("export", ["export_geometry", "export_cfd", "export_cfd_offdesign"])

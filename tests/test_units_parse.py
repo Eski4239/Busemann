@@ -66,6 +66,26 @@ def test_errors_name_the_problem(text, kind, message):
         parse_quantity(text, kind, None)
 
 
+@pytest.mark.parametrize("text", ["220 K", "220K", "220 k", "220 kelvin", "220 degK", "220 °C",
+                                  "220 Kelvin"])
+def test_temperature_units_in_the_altitude_field_name_the_kind(text):
+    """M8.2 bug 3: a temperature typed into the altitude field says what is wrong."""
+    with pytest.raises(UnitError) as err:
+        parse_quantity(text, "altitude", "km")
+    message = str(err.value)
+    assert " is not an altitude" in message and "unknown unit" not in message
+    assert "(use km, m, ft, kft)" in message
+
+
+@pytest.mark.parametrize("text, kind, first", [("5 mm", "altitude", "mm"),
+                                               ("3 metres", "pressure", "m"),
+                                               ("2 feet", "angle", "ft"),
+                                               ("1 degrees", "length", "°")])
+def test_aliases_of_other_kinds(text, kind, first):
+    with pytest.raises(UnitError, match=rf"^{first} is not a"):
+        parse_quantity(text, kind, None)
+
+
 def test_kelvin_is_case_sensitive():
     with pytest.raises(UnitError):
         parse_quantity("300 k", "temperature", "K")          # k is not K

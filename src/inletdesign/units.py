@@ -87,6 +87,38 @@ _KIND_NAMES = {"length": "length", "altitude": "altitude", "temperature": "tempe
 _NUMBER = r"[+-]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][+-]?\d+)?"
 
 
+# Spelled-out or alternative names of the table units (lower case), so any unit of another
+# kind is reported as "<unit> is not a <kind>" rather than "unknown unit".
+UNIT_ALIASES = {
+    "kelvin": "K", "kelvins": "K", "degk": "K", "°k": "K", "k": "K",
+    "celsius": "°C", "degc": "°C", "fahrenheit": "°F", "degf": "°F", "rankine": "°R",
+    "degr": "°R",
+    "meter": "m", "meters": "m", "metre": "m", "metres": "m", "feet": "ft", "foot": "ft",
+    "inch": "in", "inches": "in", "kilometer": "km", "kilometers": "km", "kilometre": "km",
+    "kilometres": "km", "millimetre": "mm", "millimeter": "mm",
+    "pascal": "Pa", "pascals": "Pa", "kilopascal": "kPa", "psia": "psi",
+    "degree": "°", "degrees": "°", "radian": "rad", "radians": "rad",
+    "kg/sec": "kg/s", "lbm/s": "lb/s", "lbs/s": "lb/s",
+}
+
+
+def _known_unit(unit, kind):
+    """Canonical table spelling of `unit` if it is a unit of any kind other than `kind`."""
+    candidates = [unit, UNIT_ALIASES.get(unit.lower().replace(" ", ""))]
+    for other, table in UNIT_KINDS.items():
+        if other == kind:
+            continue
+        lowered = {u.lower(): u for u in table}
+        for c in candidates:
+            if c is None:
+                continue
+            if c in table:
+                return c
+            if c.lower() in lowered and c not in ("k",):
+                return lowered[c.lower()]
+    return None
+
+
 class UnitError(ValueError):
     """Typed input could not be read; the message is shown under the field."""
 
@@ -122,11 +154,14 @@ def parse_quantity(text, kind, field_unit=None):
         if unit.lower() in lowered and unit not in ("K", "k"):
             unit = lowered[unit.lower()]                   # "KPA", "Deg" -> "kPa", "deg"
         else:
-            others = [k for k, t in UNIT_KINDS.items() if unit in t]
-            if others:
+            known = _known_unit(unit, kind)
+            if known is not None:                          # a unit, but of another kind
                 name = _KIND_NAMES[kind]
                 article = "an" if name[0] in "aeiou" else "a"
-                raise UnitError(f"{unit} is not {article} {name}")
+                raise UnitError(f"{known} is not {article} {name} "
+                                f"(use {', '.join(table)})")
+            if kind == "temperature" and unit == "k":
+                raise UnitError("k is not a unit: did you mean K?")
             raise UnitError(f"unknown unit '{unit}'")
     scale, offset = table[unit]
     si = value * scale + offset

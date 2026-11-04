@@ -30,7 +30,12 @@ CHARTS = (("capture", "Capture A0/Ac", ""),
 TITLE_TIPS = {"capture": "label.chart_capture", "recovery": "label.chart_recovery",
               "margin": "label.chart_margin"}
 ENTRY_SEP = "&nbsp;&nbsp; "   # ends in an ordinary space: the only place a row may wrap
-LEFT_AXIS_W = 34          # px, same on every chart so the linked M∞ axes line up
+LEFT_AXIS_W = 40          # px, same on every chart so the linked M∞ axes line up
+PLOT_MIN_H = 2 * 136      # px: at least twice the M8 chart height when the strip is shown
+BAND_MEANING = {"detached": "a ramp shock is detached (no attached-shock solution)",
+                "spillage": "below design Mach: part of the streamtube spills",
+                "overspeed": "above design Mach: shocks inside the cowl",
+                "cowl": "the cowl lip shock is detached"}
 
 
 def _key(token, glyph):
@@ -97,11 +102,12 @@ class OffDesignCharts(QWidget):
             legend.setTextFormat(Qt.TextFormat.RichText)
             legend.setWordWrap(True)          # one line normally; wraps at minimum width
             legend.setToolTip(tip(f"chart.legend.{key}"))
+            legend.setProperty("base_tip", tip(f"chart.legend.{key}"))
             self.legends[key] = legend
             box.addWidget(legend)
             w = pg.PlotWidget(background=tokens.COLORS["surface"])
             w.setObjectName(f"chart_{key}")
-            w.setMinimumHeight(tokens.space(17))
+            w.setMinimumHeight(PLOT_MIN_H)
             item = w.getPlotItem()
             item.setMenuEnabled(False)
             item.hideButtons()
@@ -226,6 +232,8 @@ class OffDesignCharts(QWidget):
 
         self.bands = model.regime_bands(design, sweep, lo, hi)
         self._draw_bands()
+        for legend in self.legends.values():         # band colours explained on hover
+            legend.setToolTip(f"{legend.property('base_tip')}\n{self.band_help()}")
         self._draw_cfd(design)
         self._set_legends(design, bool(above))
 
@@ -297,6 +305,19 @@ class OffDesignCharts(QWidget):
             scatter.setZValue(18)
             self.plots[key].getPlotItem().addItem(scatter)
             self.cfd_items.append(scatter)
+
+    def band_help(self):
+        """Plain text for the band colours (hover tooltip; the text rows were removed)."""
+        colour = {"detached": "red", "spillage": "blue", "overspeed": "amber",
+                  "cowl": "dark red"}
+        lines = ["Shaded bands:"]
+        for band in self.bands or []:
+            line = f"  {colour.get(band.kind, band.kind)}: {band.label}"
+            if line not in lines:
+                lines.append(line)
+        if len(lines) == 1:
+            lines += [f"  {colour[k]}: {BAND_MEANING[k]}" for k in BAND_MEANING]
+        return "\n".join(lines)
 
     # --- cursor ------------------------------------------------------------------------
     def cursor(self):

@@ -3,7 +3,7 @@
 ## Relations
 <!-- SOURCE: NACA Report 1135 (1953), eq. (2), p. 614: thermal equation of state p = rho R T -->
 $$ \rho_\infty = \frac{p_\infty}{R\,T_\infty} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (29b), p. 616: speed of sound a^2 = gamma p / rho = gamma R T -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (29b), p. 616: speed of sound a² = γ p / ρ = γ R T -->
 $$ a_\infty = \sqrt{\gamma R\,T_\infty} $$
 <!-- SOURCE: NACA Report 1135 (1953), p. 616: definition of the Mach number M = V / a -->
 $$ V_\infty = M_\infty\,a_\infty $$

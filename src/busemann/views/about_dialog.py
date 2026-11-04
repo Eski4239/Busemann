@@ -12,7 +12,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel, QListWidget,
-    QTableWidget, QTableWidgetItem, QTabWidget, QTextBrowser, QVBoxLayout, QWidget,
+    QScrollArea, QTableWidget, QTableWidgetItem, QTextBrowser, QToolButton, QVBoxLayout,
+    QWidget,
 )
 
 from .. import __version__
@@ -20,7 +21,6 @@ from ..charts.model import load_validation
 from ..paths import resource_path
 from ..theme import tokens
 
-from ..verification import ABOUT, ASSUMPTIONS  # noqa: E402,F401  (Qt-free texts)
 
 
 def components():
@@ -52,36 +52,80 @@ def doc_link(rel, repository):
     return f"{repository}/blob/main/{rel}"
 
 
+ABOUT_TEXT = (
+    "I made Busemann to design the ramps of a two-dimensional supersonic inlet and see what "
+    "its shocks do. You give it a flight Mach number and the air it flies in; it finds the ramp "
+    "angles (or takes yours), draws the shock system and shows the pressure recovery, the mass "
+    "capture and the flow in every region. It does the same for the fixed inlet at other Mach "
+    "numbers.")
+MAKER_TEXT = "Who made it and why: [your words here]"
+ABOUT_ASSUMPTIONS = (
+    "Two-dimensional, steady, inviscid flow of a calorically perfect gas (constant γ).",
+    "Straight attached shocks: the ramp shocks meet at the cowl lip at the design Mach, and a "
+    "normal shock at the throat makes the flow subsonic.",
+    "Not modelled: boundary layers, the cowl's own shock and its reflections, and the "
+    "subsonic diffuser. Above the design Mach the recovery is an upper bound.",
+)
+
+
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("aboutDialog")
         self.setWindowTitle("About Busemann")
-        self.resize(720, 560)
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._about_tab(), "About")
-        self.tabs.addTab(self._validation_tab(), "Validation")
-        self.tabs.addTab(self._licences_tab(), "Licences")
+        self.resize(680, 620)
+        body = QWidget()
+        v = QVBoxLayout(body)
+        v.setContentsMargins(tokens.space(3), tokens.space(2), tokens.space(3), tokens.space(2))
+        v.setSpacing(tokens.space(1))
+        v.addWidget(self._about_section())
+        v.addWidget(self._heading("How it was checked"))
+        v.addWidget(self._validation_tab())
+        self.licences_toggle = QToolButton()
+        self.licences_toggle.setObjectName("sectionToggle")
+        self.licences_toggle.setCheckable(True)
+        self.licences_toggle.setText("Licences ▸")
+        self.licences_toggle.setToolTip("Show the licences of the components Busemann uses.")
+        self.licences = self._licences_tab()
+        self.licences.hide()
+        self.licences_toggle.toggled.connect(self._show_licences)
+        v.addWidget(self.licences_toggle)
+        v.addWidget(self.licences, 1)
+        v.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(body)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout = QVBoxLayout(self)
-        layout.addWidget(self.tabs, 1)
+        layout.addWidget(scroll, 1)
         layout.addWidget(buttons)
 
-    def _about_tab(self):
-        items = "".join(f"<li>{html.escape(a)}</li>" for a in ASSUMPTIONS)
+    @staticmethod
+    def _heading(text):
+        label = QLabel(text)
+        label.setObjectName("drawerTitle")
+        label.setToolTip(text)
+        return label
+
+    def _show_licences(self, on):
+        self.licences.setVisible(on)
+        self.licences_toggle.setText("Licences" if on else "Licences ▸")
+
+    def _about_section(self):
+        items = "".join(f"<li>{html.escape(a)}</li>" for a in ABOUT_ASSUMPTIONS)
         text = QLabel(
             f"<h2 style='margin-bottom:2px'>Busemann {html.escape(__version__)}</h2>"
-            f"<p>{html.escape(ABOUT)}</p><p><b>Model assumptions</b></p><ul>{items}</ul>")
+            f"<p>{html.escape(ABOUT_TEXT)}</p>"
+            f"<p><i>{html.escape(MAKER_TEXT)}</i></p>"
+            f"<p><b>What it assumes</b></p><ul>{items}</ul>")
         text.setWordWrap(True)
         text.setTextFormat(Qt.TextFormat.RichText)
         text.setAlignment(Qt.AlignmentFlag.AlignTop)
-        text.setToolTip("What Busemann computes and the assumptions behind every result.")
+        text.setToolTip("What Busemann does and what it assumes.")
         self.about_label = text
-        page = QWidget()
-        QVBoxLayout(page).addWidget(text)
-        return page
+        return text
 
     def _validation_tab(self):
         data = load_validation()
@@ -119,9 +163,12 @@ class AboutDialog(QDialog):
         info.setOpenExternalLinks(True)
         info.setToolTip("Why the above-design case differs, and the full validation reports.")
         self.validation_info = info
+        table.setMinimumHeight(table.verticalHeader().length()
+                               + table.horizontalHeader().height() + 6)
         page = QWidget()
         v = QVBoxLayout(page)
-        v.addWidget(table, 1)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(table)
         v.addWidget(info)
         return page
 
@@ -143,11 +190,13 @@ class AboutDialog(QDialog):
         own = QLabel("Busemann's own source code: no licence has been chosen yet.")
         own.setObjectName("muted")
         own.setToolTip("The repository does not contain a LICENSE file for Busemann itself.")
+        self.licence_text.setMinimumHeight(tokens.space(30))
         page = QWidget()
         h = QHBoxLayout()
         h.addWidget(self.licence_list)
         h.addWidget(self.licence_text, 1)
         v = QVBoxLayout(page)
+        v.setContentsMargins(0, 0, 0, 0)
         v.addLayout(h, 1)
         v.addWidget(own)
         return page

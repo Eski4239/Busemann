@@ -14,6 +14,7 @@ from ..theme import qt as theme
 from ..theme import tokens
 from . import colors as _colors
 from . import picture as P
+from ..crashlog import guarded
 
 LAYERS = ("regions", "walls", "shocks", "streamtube", "dimensions", "annotations", "selection")
 TOGGLEABLE = ("shocks", "regions", "dimensions", "grid")
@@ -102,6 +103,7 @@ class Label(QGraphicsSimpleTextItem):
         r = super().boundingRect()
         return r.adjusted(-self.PAD_X, -self.PAD_Y, self.PAD_X, self.PAD_Y)
 
+    @guarded()
     def paint(self, painter, option, widget=None):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color("surface", 0.85))
@@ -138,6 +140,7 @@ class InletScene(QGraphicsScene):
         self.dim_labels = []          # Label items of the dimension layer, placement order
         self.mach_edges = [0.5, 1.0]
         self.mach_colors = []
+        self.continuous_range = None  # (lo, hi): continuous Mach colours (off-design view)
         self.label_rects = []         # placed label rects (model mm), after layout_labels
         self._callouts = []           # (leader item, anchor point, Label)
         self._build_static()
@@ -201,7 +204,10 @@ class InletScene(QGraphicsScene):
         self.mach_edges = P.mach_bins(min(machs), pic.skeleton.regions[0].M)
         self.mach_colors = bin_colors(self.mach_edges)
         for item, region in zip(self.region_items, pic.regions):
-            fill = QColor(self.mach_colors[P.bin_index(region.state.M, self.mach_edges)])
+            if self.continuous_range is not None:        # off-design view: continuous map
+                fill = QColor(_colors.continuous(region.state.M, *self.continuous_range))
+            else:
+                fill = QColor(self.mach_colors[P.bin_index(region.state.M, self.mach_edges)])
             item.setPolygon(_poly(region.polygon))
             item.setBrush(QBrush(fill))
             border = QPen(QColor(_colors.darker(fill.name())), 1.0)

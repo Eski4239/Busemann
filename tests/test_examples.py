@@ -1,4 +1,4 @@
-"""Bundled example projects load cleanly and show what their names promise."""
+"""Bundled example designs (DXF, M8.2) load cleanly and show what their names promise."""
 import pytest
 
 from busemann import project as P
@@ -9,7 +9,7 @@ EXAMPLES = ("validation_case", "x15_four_ramp", "m3_cowl_constrained")
 
 
 def _load(name):
-    inputs, view, warnings = P.load(resource_path("examples", f"{name}.busemann"))
+    inputs, view, warnings = P.load(resource_path("examples", f"{name}.dxf"))
     assert warnings == []
     return inputs
 
@@ -45,6 +45,13 @@ def test_examples_are_shipped():
     from pathlib import Path
 
     data = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text("utf-8"))
-    assert "resources/examples/*.busemann" in data["tool"]["setuptools"]["package-data"]["busemann"]
+    assert "resources/examples/*.dxf" in data["tool"]["setuptools"]["package-data"]["busemann"]
     for name in EXAMPLES:
-        assert resource_path("examples", f"{name}.busemann").is_file()
+        assert resource_path("examples", f"{name}.dxf").is_file()
+
+
+def test_no_busemann_files_remain():
+    from pathlib import Path
+
+    root = Path(__file__).parents[1] / "src" / "busemann" / "resources"
+    assert list(root.rglob("*.busemann")) == []

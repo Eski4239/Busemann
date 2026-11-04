@@ -102,8 +102,8 @@ def beta_from_theta(M1, theta_deg, gamma=1.4, weak=True):
     theta_max, beta_at_max = max_deflection(M1, gamma)
     if theta_deg > theta_max:
         raise ValueError(
-            f"theta={theta_deg} deg exceeds theta_max={theta_max:.4f} deg for M1={float(M1)}: "
-            "shock detaches, no attached oblique shock solution exists"
+            f"θ = {float(theta_deg):.2f}° exceeds θmax = {float(theta_max):.2f}° at "
+            f"M₁ = {float(M1):.3f}: the shock detaches (no attached oblique-shock solution)"
         )
     mach_angle = float(_mach_angle_deg(M1))
     if theta_deg <= 0.0:

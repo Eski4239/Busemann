@@ -6,20 +6,24 @@ from ..tooltips import attach
 from ..theme import tokens
 
 EMPTY = "—"
+KPI_COMPACT = 17         # px, value font of a compact card
 
 
 class KpiCard(QFrame):
-    def __init__(self, title, key, parent=None):
-        """`key` names the card's tooltip in tooltips.json (shared by all its labels)."""
+    def __init__(self, title, key, parent=None, compact=False):
+        """`key` names the card's tooltip in tooltips.json (shared by all its labels).
+        `compact`: smaller value font and padding (Results panel, M8.2)."""
         super().__init__(parent)
         self.setObjectName("kpiCard")
+        self.setProperty("compact", compact)
 
         self.title = QLabel(theme.caps(title))
         self.title.setObjectName("kpiTitle")
         self.title.setFont(theme.label_font())
         self.value_label = QLabel(EMPTY)
         self.value_label.setObjectName("kpiValue")
-        self.value_label.setFont(theme.mono_font(tokens.SIZE_KPI))
+        self.value_label.setFont(theme.mono_font(KPI_COMPACT if compact else tokens.SIZE_KPI))
+        self.value_label.setProperty("compact", compact)
         self.unit_label = QLabel()
         self.unit_label.setObjectName("unit")
         self.unit_label.setFont(theme.mono_font(tokens.SIZE_LABEL))
@@ -42,9 +46,10 @@ class KpiCard(QFrame):
         value_row.addStretch(1)
         value_row.addWidget(self.badge)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(tokens.space(2), tokens.space(1) + 4, tokens.space(2),
-                                  tokens.space(1) + 4)
-        layout.setSpacing(2)
+        pad = tokens.space(1) if compact else tokens.space(1) + 4
+        layout.setContentsMargins(tokens.space(2) - (4 if compact else 0), pad,
+                                  tokens.space(2), pad)
+        layout.setSpacing(1 if compact else 2)
         layout.addWidget(self.title)
         layout.addLayout(value_row)
         layout.addWidget(self.sub_label)

@@ -8,6 +8,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QFrame, QWidget
 
 from ..theme import tokens
+from ..crashlog import guarded
 
 DIM_ALPHA = 0.45
 HOLE_PAD = 6
@@ -27,6 +28,7 @@ class DimOverlay(QWidget):
         window.installEventFilter(self)
         self.hide()
 
+    @guarded()
     def eventFilter(self, obj, event):
         if obj is self.window_ and event.type() == QEvent.Type.Resize and self.isVisible():
             self.relayout()
@@ -65,6 +67,7 @@ class DimOverlay(QWidget):
             rect = QRect(w.mapTo(self.window_, w.rect().topLeft()), w.size())
         self.hole = rect.adjusted(-HOLE_PAD, -HOLE_PAD, HOLE_PAD, HOLE_PAD)
 
+    @guarded()
     def paintEvent(self, event):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)

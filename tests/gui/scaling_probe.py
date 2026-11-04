@@ -99,6 +99,18 @@ def main():
     settle(400)
     window.tabs.setCurrentWidget(window.canvas)
     settle(200)
+    # M8.2: every column of the flow-regions and ramp tables fully visible, including the
+    # widest ramp table (custom angles, 4 ramps, with the ∂η/∂θ column)
+    window.state.update(n_ramps=4, method="custom", custom_angles=(6.0, 7.0, 8.0, 9.0))
+    settle(1500)
+    problems += [{"widget": "RampTable", "name": f"row {r} col {c}", "size": [have, 0],
+                  "min_hint": [need, 0], "tab": "custom 4 ramps"}
+                 for r, c, need, have in window.design_panel.ramp_table.column_overflow()]
+    problems += [{"widget": "StationTable", "name": f"column {c}", "size": [have, 0],
+                  "min_hint": [need, 0], "tab": "custom 4 ramps"}
+                 for c, need, have in window.results_panel.station_table.column_overflow()]
+    window.state.update(n_ramps=2, method="oswatitsch")
+    settle()
     if len(sys.argv) > 1:
         window.grab().save(sys.argv[1])
     window.state.shutdown()

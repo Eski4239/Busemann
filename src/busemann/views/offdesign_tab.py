@@ -4,7 +4,9 @@ Header (design-point chip, off-design Mach slider, regime badge), the inlet canv
 off-design mode, and a strip with the three off-design charts plus a results card.
 """
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+)
 
 from ..canvas import InletCanvas
 from ..charts.offdesign_charts import OffDesignCharts
@@ -13,6 +15,7 @@ from ..theme import qt as theme
 from ..theme import tokens
 from ..tooltips import attach, tip
 from ..widgets import LabeledSlider, section_title
+from ..crashlog import guarded
 
 # regime -> (badge text, one-line explanation)
 REGIMES = {
@@ -25,6 +28,7 @@ REGIMES = {
                              "does not apply."),
 }
 EMPTY = "—"
+SUBTITLE = "How this fixed inlet performs at other flight Mach numbers"
 
 
 def _mass_flow_text(kgps, system):
@@ -184,6 +188,10 @@ class OffDesignTab(QWidget):
         header.setContentsMargins(tokens.space(2), tokens.space(1), tokens.space(2), 0)
         header.setSpacing(4)
         header.addLayout(top)
+        self.subtitle = QLabel(SUBTITLE)
+        self.subtitle.setObjectName("tabSubtitle")
+        self.subtitle.setToolTip(tip("tab.offdesign"))
+        header.addWidget(self.subtitle)
         slider_row = QHBoxLayout()
         slider_row.setSpacing(tokens.space(2))
         slider_row.addWidget(self.slider, 1)
@@ -197,6 +205,7 @@ class OffDesignTab(QWidget):
         strip = QWidget()
         strip.setObjectName("offDesignStrip")
         strip.setFixedHeight(tokens.OFFDESIGN_STRIP_H)
+        self.strip = strip
         bottom = QHBoxLayout()
         bottom.setContentsMargins(0, 0, 0, 0)
         bottom.setSpacing(tokens.space(2))
@@ -207,14 +216,25 @@ class OffDesignTab(QWidget):
         strip_layout.setContentsMargins(tokens.space(2), 0, tokens.space(2), tokens.space(1))
         strip_layout.setSpacing(2)
         strip_layout.addLayout(bottom, 1)
-        for label in (self.charts.band_legend, self.charts.note_legend, self.charts.cfd_note):
-            strip_layout.addWidget(label)
+        for label in (self.charts.note_legend, self.charts.cfd_note):
+            strip_layout.addWidget(label)            # band colours: hover tooltips instead
+        self.charts.band_legend.hide()
+
+        # one "Charts" bar; collapsed by default (the canvas keeps the room)
+        self.charts_toggle = QToolButton()
+        self.charts_toggle.setObjectName("chartsBar")
+        self.charts_toggle.setCheckable(True)
+        self.charts_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.charts_toggle.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.charts_toggle.toggled.connect(self.set_charts_expanded)
+        self.set_charts_expanded(False)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(tokens.space(1))
         layout.addLayout(header)
         layout.addWidget(self.canvas, 1)
+        layout.addWidget(self.charts_toggle)
         layout.addWidget(strip)
 
         # Space plays / pauses while the tab background or the canvas has focus (a focused
@@ -233,6 +253,22 @@ class OffDesignTab(QWidget):
             self._on_design()
             self._on_off_design()
 
+    def set_charts_expanded(self, expanded):
+        """Show or hide the chart strip (charts at least twice the old height when shown)."""
+        if self.charts_toggle.isChecked() != expanded:
+            self.charts_toggle.setChecked(expanded)
+            return
+        self.strip.setVisible(expanded)
+        self.charts_toggle.setText("Charts" if expanded else "Charts ▸")
+        self.charts_toggle.setIcon(theme.icon("chevron-down" if expanded else "chevron-right",
+                                              "text_muted", 14))
+        self.charts_toggle.setToolTip(f"{tip('offdesign.charts_toggle')}\n"
+                                      f"{self.charts.band_help()}")
+
+    def charts_expanded(self):
+        return self.charts_toggle.isChecked()
+
+    @guarded()
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat() and self.hasFocus():
             self.playback.toggle()

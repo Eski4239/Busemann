@@ -239,7 +239,7 @@ def freestream(M, altitude_m=None, p=None, T=None, gamma=1.4):
     if T0 > REAL_GAS_T0_LIMIT:
         warnings.append(
             f"real-gas regime: T0 = {T0:.0f} K > {REAL_GAS_T0_LIMIT:.0f} K; "
-            "vibrational excitation makes the ideal-gas (constant gamma) model optimistic"
+            "vibrational excitation makes the ideal-gas (constant γ) model optimistic"
         )
 
     return Freestream(
@@ -302,10 +302,10 @@ def _separation(shocks):
         if not c.flagged:
             continue
         if c.kind == "normal":
-            what = f"M₁ {c.M1:.2f} ≥ {c.threshold:g}, normal-shock criterion"
+            what = f"M₁ {c.M1:.2f} ≥ {c.threshold:g}"
             where = "the terminal normal shock"
         else:
-            what = f"p₂/p₁ {c.value:.2f} ≥ {c.threshold:.2f}, Korkegi 1975"
+            what = f"p₂/p₁ {c.value:.2f} ≥ {c.threshold:.2f}"
             where = c.shock
         notices.append(Notice(
             "warn", f"Shock-induced separation likely at {where} ({what}) — {_sep.WORDING}",
@@ -610,6 +610,75 @@ def optimum_gap(design_result):
                  cowl_wedge=i.cowl_wedge_deg)
     eta_opt = opt.recovery_total
     return 100.0 * (eta_opt - design_result.recovery_total) / eta_opt, eta_opt
+
+
+RAMP_MIN_DEG = 0.5            # lower bound of a dragged ramp angle
+RAMP_MAX_DEG = 30.0           # fixed upper bound
+DETACH_MARGIN_DEG = 0.5       # stay this far below the detachment limit (every ramp)
+MIN_THROAT_FRACTION = 0.05    # throat height >= this x capture height
+
+
+@dataclass(frozen=True)
+class AngleBounds(_Serialisable):
+    lo: float                 # deg
+    hi: float                 # deg
+    reason: str               # what sets hi: "maximum" | "detachment" | "downstream"
+    limit_deg: float          # the value behind `reason` (theta_max(M_k), 30, or hi)
+    detail: str               # short user text, e.g. "detachment at 28.75°"
+
+
+def _geometry_ok(d):
+    pts, lip = d.geometry.ramp_points, d.geometry.lip
+    xs = [p[0] for p in pts]
+    return (all(b > a for a, b in zip(xs, xs[1:])) and all(p[1] < lip[1] for p in pts)
+            and d.throat_height >= MIN_THROAT_FRACTION * d.inputs.capture_height)
+
+
+def _angles_ok(design_result, k, theta):
+    """The design stays valid with theta_k = theta: every ramp attached with the margin,
+    supersonic flow ahead of every ramp, sane geometry."""
+    angles = list(design_result.ramp_angles_deg)
+    angles[k] = theta
+    try:
+        d = _redesign(design_result, angles)
+    except ValueError:
+        return False
+    for j in range(k + 1, len(angles)):
+        M_j = d.regions[j].M
+        if M_j <= 1.0 or angles[j] > float(_obl.max_deflection(M_j, d.inputs.gamma)[0]) \
+                - DETACH_MARGIN_DEG:
+            return False
+    return _geometry_ok(d)
+
+
+def ramp_angle_bounds(design_result, k, tol=1e-3):
+    """Bounds of ramp k's incremental angle (deg) for interactive editing, other angles fixed:
+    lo = 0.5°; hi = min(theta_max(M_k) - 0.5°, 30°, the largest angle keeping the whole design
+    valid: downstream ramps attached with 0.5° margin and supersonic flow ahead of each,
+    corners in increasing x below the lip, throat >= 5 % h_c). M_k (ahead of ramp k) depends
+    only on the upstream angles. Bisection for the downstream limit."""
+    n = design_result.inputs.n_ramps
+    if not 0 <= k < n:
+        raise ValueError(f"ramp index must be 0-{n - 1} (got {k})")
+    M_k = design_result.regions[k].M
+    t_max = float(_obl.max_deflection(M_k, design_result.inputs.gamma)[0])
+    hi, reason, limit = RAMP_MAX_DEG, "maximum", RAMP_MAX_DEG
+    if t_max - DETACH_MARGIN_DEG < hi:
+        hi, reason, limit = t_max - DETACH_MARGIN_DEG, "detachment", t_max
+    lo = RAMP_MIN_DEG
+    if not _angles_ok(design_result, k, hi):
+        good, bad = lo, hi
+        if not _angles_ok(design_result, k, good):
+            good = design_result.ramp_angles_deg[k]          # current angle is valid
+        while bad - good > tol:
+            mid = 0.5 * (good + bad)
+            good, bad = (mid, bad) if _angles_ok(design_result, k, mid) else (good, mid)
+        hi, reason, limit = good, "downstream", good
+    detail = {"maximum": f"{RAMP_MAX_DEG:g}° maximum",
+              "detachment": f"detachment at {limit:.2f}°",
+              "downstream": (f"ramp {k + 2} reaches its limit at {limit:.2f}°" if k + 1 < n
+                             else f"throat closes at {limit:.2f}°")}[reason]
+    return AngleBounds(lo=lo, hi=float(hi), reason=reason, limit_deg=float(limit), detail=detail)
 
 
 def recovery_sensitivity(design_result, step_deg=0.01):

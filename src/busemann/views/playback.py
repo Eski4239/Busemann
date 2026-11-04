@@ -108,9 +108,12 @@ class PlaybackControls(QWidget):
         self.speed.changed.connect(lambda key: setattr(playback, "speed", float(key)))
         self.loop_button = QToolButton()
         self.loop_button.setObjectName("layerToggle")
-        self.loop_button.setText("Loop")
         self.loop_button.setCheckable(True)
-        self.loop_button.setToolTip(tip("playback.loop"))
+        self.loop_button.setToolTip("Loop sweep")
+        self.loop_button.setAccessibleName("Loop sweep")
+        from ..theme import qt as theme
+
+        self.loop_button.setIcon(theme.icon("loop", "text", 16))
         self.loop_button.toggled.connect(lambda on: setattr(playback, "loop", on))
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)

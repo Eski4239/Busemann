@@ -4,9 +4,8 @@ import sys
 from PySide6.QtCore import QEasingCurve, Qt, QTimer, QVariantAnimation
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QScrollArea, QStackedWidget,
-    QTabWidget,
-    QToolBar, QToolButton, QVBoxLayout, QWidget,
+    QApplication, QFrame, QHBoxLayout, QLabel, QMainWindow, QProgressBar, QScrollArea,
+    QSizePolicy, QStackedWidget, QTabWidget, QToolBar, QToolButton, QVBoxLayout, QWidget,
 )
 
 from . import __version__
@@ -24,6 +23,7 @@ from .views.offdesign_tab import OffDesignTab
 from .views.export_controller import ExportController
 from .views.project_controller import ProjectController
 from .widgets import divider
+from .crashlog import guarded
 
 
 def _placeholder(title, text, tip_key):
@@ -114,11 +114,14 @@ class MainWindow(QMainWindow):
         self._column_anim.finished.connect(self._on_column_anim_done)
 
         self.canvas = InletCanvas(self.state)
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
+        from .widgets.tab_stack import TabStack
+
+        self.tabs = TabStack()                   # its tab bar sits in the toolbar row
         self.tabs.addTab(self.canvas, "Design")
         self.offdesign_tab = OffDesignTab(self.state)
         self.tabs.addTab(self.offdesign_tab, "Off-design")
+        self.tabs.setTabToolTip(0, tip("tab.design"))
+        self.tabs.setTabToolTip(1, tip("tab.offdesign"))
         self.analytics_tab = _placeholder(
             "Analytics", "Trade studies, drag and buzz estimates — coming in M9.",
             "placeholder.analytics")
@@ -126,7 +129,40 @@ class MainWindow(QMainWindow):
             "Compare", "Side-by-side design comparison — coming in M10.", "placeholder.compare")
         self.tabs.addTab(self.analytics_tab, "Analytics")
         self.tabs.addTab(self.compare_tab, "Compare")
+        self.tabs.setTabToolTip(2, tip("placeholder.analytics"))
+        self.tabs.setTabToolTip(3, tip("placeholder.compare"))
         self.tabs.currentChanged.connect(self._on_tab)
+
+        # centre column: banner (imported geometry, ...), view row (layer toggles), pages
+        self.banner = QFrame()
+        self.banner.setObjectName("infoBanner")
+        banner_row = QHBoxLayout(self.banner)
+        banner_row.setContentsMargins(tokens.space(2), 6, tokens.space(1), 6)
+        self.banner_label = QLabel()
+        self.banner_label.setObjectName("infoBannerText")
+        self.banner_label.setWordWrap(True)
+        self.banner_label.setToolTip(tip("banner.imported"))
+        close = QToolButton()
+        close.setText("✕")
+        close.setObjectName("bannerClose")
+        close.setToolTip(tip("banner.close"))
+        close.clicked.connect(lambda: self.show_banner(None))
+        banner_row.addWidget(self.banner_label, 1)
+        banner_row.addWidget(close)
+        self.banner.hide()
+        self.view_row = QWidget()
+        self.view_row.setObjectName("viewRow")
+        self._view_row_layout = QHBoxLayout(self.view_row)
+        self._view_row_layout.setContentsMargins(tokens.space(1), 2, tokens.space(1), 2)
+        self._view_row_layout.setSpacing(2)
+        centre_col = QWidget()
+        col = QVBoxLayout(centre_col)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+        col.addWidget(self.banner)
+        col.addWidget(self.view_row)
+        col.addWidget(self.tabs, 1)
+        self.centre_column = centre_col
 
         centre = QWidget()
         centre.setObjectName("canvasHost")
@@ -134,7 +170,7 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
         row.addWidget(self.left_panel)
-        row.addWidget(self.tabs, 1)
+        row.addWidget(self.centre_column, 1)
         row.addWidget(self.right_column)
         self.setCentralWidget(centre)
 
@@ -143,10 +179,14 @@ class MainWindow(QMainWindow):
         self.undo = InputUndo(self.state, self)
         self.project = ProjectController(self)
         self.exports = ExportController(self, self.project.export_menu)
+        self.results_panel.set_export_menu(self.project.export_menu)   # same actions
         self._build_edit_menu()
         help_menu = self.menuBar().addMenu("&Help")
         self.help_menu = help_menu
         self._build_shortcuts(help_menu)
+        from .widgets.wheel_guard import install as install_wheel_guard
+
+        self.wheel_guard = install_wheel_guard(self)     # wheel scrolls panels, not values
         self.about_action = help_menu.addAction("&About Busemann…")
         self.about_action.triggered.connect(self.show_about)
         self.setAcceptDrops(True)
@@ -199,6 +239,9 @@ class MainWindow(QMainWindow):
         bar.setFloatable(False)
         bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.addToolBar(bar)
+        self.toolbar = bar
+        bar.addWidget(self.tabs.tabBar())
+        bar.addSeparator()
         self.toggle_left = QAction(theme.icon("panel-left", "text"), "Show inputs panel", self)
         self.toggle_left.setToolTip(tip("toolbar.toggle_left"))
         self.toggle_left.setShortcut(QKeySequence("Ctrl+["))
@@ -242,10 +285,13 @@ class MainWindow(QMainWindow):
             button.setObjectName("layerToggle")
             button.setDefaultAction(action)
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-            bar.addWidget(button)
+            self._view_row_layout.addWidget(button)            # row above the canvas
             self.layer_actions[name] = action
+        self._view_row_layout.addStretch(1)
 
-        bar.addSeparator()
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        bar.addWidget(spacer)                                   # Explain on the right
         self.explain_action = QAction("Explain", self)
         self.explain_action.setShortcut(QKeySequence("E"))
         self.explain_action.setCheckable(True)
@@ -259,6 +305,11 @@ class MainWindow(QMainWindow):
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         bar.addWidget(button)
         self.explain_button = button
+
+    def show_banner(self, text):
+        """A one-line banner above the canvas (None hides it)."""
+        self.banner_label.setText(text or "")
+        self.banner.setVisible(bool(text))
 
     def canvases(self):
         return (self.canvas, self.offdesign_tab.canvas)
@@ -287,15 +338,19 @@ class MainWindow(QMainWindow):
                 self.explain_drawer.show_item(kind, index)
 
     def _toggle_explain(self, on):
-        """Open: show the drawer in the right column and widen it to DRAWER_W; close: narrow
-        it back, then show the results again (200 ms, the centre column follows)."""
+        """Open: force the right column open (its hide toggle is disabled while Explain is
+        active) and show the topic tree there; close: re-enable the toggle and show the
+        results again."""
         if on:
-            self.explain_drawer.show_item(*self.current_canvas().selection)
+            self.toggle_right.setChecked(True)
+            self.toggle_right.setEnabled(False)
             self.right_column.setCurrentWidget(self.explain_drawer)
             self.explain_drawer.open()
+            self.explain_drawer.show_item(*self.current_canvas().selection)
             target = DRAWER_W
         else:
             self.explain_drawer.close_drawer()
+            self.toggle_right.setEnabled(True)
             target = tokens.RIGHT_PANEL_WIDTH
         self._column_anim.stop()
         self._column_anim.setStartValue(float(self.right_column.width()))
@@ -424,22 +479,25 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _dropped_project(mime):
         urls = [u for u in mime.urls() if u.isLocalFile()] if mime.hasUrls() else []
-        if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".busemann"):
+        if len(urls) == 1 and urls[0].toLocalFile().lower().endswith(".dxf"):
             return urls[0].toLocalFile()
         return None
 
+    @guarded()
     def dragEnterEvent(self, event):
         if self._dropped_project(event.mimeData()):
             event.acceptProposedAction()
         else:
             event.ignore()
 
+    @guarded()
     def dropEvent(self, event):
         path = self._dropped_project(event.mimeData())
         if path:
             event.acceptProposedAction()
             self.project.open_path(path)
 
+    @guarded()
     def closeEvent(self, event):
         if not self.project.maybe_save():
             event.ignore()
@@ -455,6 +513,9 @@ def setup_application(app):
     app.setApplicationName("Busemann")
     app.setApplicationVersion(__version__)
     theme.apply(app)
+    from .gc_guard import install as install_gc_guard
+
+    install_gc_guard(app)          # cyclic GC on the GUI thread only (worker-thread crash)
     return app
 
 
@@ -466,7 +527,7 @@ def setup_high_dpi():
 
 
 def main(argv=None):
-    """Start the app; `busemann path/to/file.busemann` opens that project."""
+    """Start the app; `busemann path/to/design.dxf` opens that design."""
     import multiprocessing
 
     multiprocessing.freeze_support()          # equation render process in a frozen build
@@ -476,6 +537,9 @@ def main(argv=None):
     setup_high_dpi()
     args = sys.argv[1:] if argv is None else list(argv)
     app = QApplication.instance() or QApplication(["busemann", *args])
+    from .crashlog import install as install_crash_log
+
+    install_crash_log(app)                  # crash.log: tracebacks, native crashes, UI stalls
     setup_application(app)
     window = MainWindow()                   # hidden while the welcome window is up
     window.resize(1440, 900)
@@ -484,11 +548,8 @@ def main(argv=None):
         window.show()
         window.project.open_later(paths[0])
         return app.exec()
-    from .views.welcome_dialog import WelcomeDialog, apply_choice, show_at_startup
+    from .views.welcome_dialog import WelcomeDialog, apply_choice
 
-    if not show_at_startup():               # "Show at startup" off: straight to the window
-        window.show()
-        return app.exec()
     welcome = WelcomeDialog()
     welcome.exec()
     apply_choice(window, welcome.choice)

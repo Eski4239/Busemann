@@ -146,7 +146,7 @@ def cowl_check(M, turn_deg, gamma=1.4, where="M∞"):
     if margin < 0.0:
         return theta_max, margin, "error", (
             f"External cowl shock detached (cowl turns {turn_deg:.2f}°, "
-            f"θ_max = {theta_max:.2f}° at {where} = {M:.2f}): bow shock, "
+            f"θmax = {theta_max:.2f}° at {where} = {M:.2f}): bow shock, "
             "spillage and cowl drag not modelled"
         )
     if margin < COWL_MARGIN_WARN_DEG:
@@ -161,5 +161,5 @@ def cowl_lip_message(margin, level):
     """Above design Mach the lip sees freestream on both faces: a strong lip shock interacts
     with the ramp shocks (Mach reflection, seen in the Phase 3d CFD at M 3.25)."""
     state = "detached" if level == "error" else "near detachment"
-    return (f"{COWL_LIP_PREFIX} {state} (θ_max − turn = {margin:.2f}°): Mach reflection at "
+    return (f"{COWL_LIP_PREFIX} {state} (θmax − turn = {margin:.2f}°): Mach reflection at "
             "the lip likely; recovery below the ideal value")

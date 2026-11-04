@@ -34,7 +34,7 @@ def test_x15_four_ramp_cowl_is_detached():
     [notice] = _cowl_notices(d)
     assert notice.level == "error"
     assert notice.text.startswith("External cowl shock detached (cowl turns 59.50°, "
-                                  f"θ_max = {d.theta_max_freestream_deg:.2f}° at M∞ = 6.70)")
+                                  f"θmax = {d.theta_max_freestream_deg:.2f}° at M∞ = 6.70)")
     assert "bow shock, spillage and cowl drag not modelled" in notice.text
 
 
@@ -212,7 +212,7 @@ def test_above_design_message_points_at_mach_reflection():
     r = api.off_design_point(d, 3.25)
     [n] = _cowl_notices(r)
     assert n.level == "warn"
-    assert n.text == (f"Cowl lip shock near detachment (θ_max − turn = "
+    assert n.text == (f"Cowl lip shock near detachment (θmax − turn = "
                       f"{r.cowl_margin_deg:.2f}°): Mach reflection at the lip likely; "
                       "recovery below the ideal value")
     assert f"{r.cowl_margin_deg:.2f}" == "1.82"

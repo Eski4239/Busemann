@@ -1,9 +1,9 @@
 # Cowl lip at M∞ {{off.M_inf:.2f}}
 
 ## Relations
-<!-- SOURCE: definition used by this tool: the flow reaching the lip is the region containing the lip; its direction phi_lip is already turned by the ramp shocks it has crossed -->
+<!-- SOURCE: definition used by this tool: the flow reaching the lip is the region containing the lip; its direction φlip is already turned by the ramp shocks it has crossed -->
 $$ \theta_\mathrm{req} = \max(0,\;\theta_\mathrm{cowl} - \varphi_\mathrm{lip}) + \delta_\mathrm{wedge} $$
-<!-- SOURCE: NACA Report 1135 (1953), eq. (168), p. 624, with theta_max from eq. (139a), p. 621, evaluated at the lip Mach -->
+<!-- SOURCE: NACA Report 1135 (1953), eq. (168), p. 624, with θmax from eq. (139a), p. 621, evaluated at the lip Mach -->
 $$ \mathrm{margin} = \theta_\mathrm{max}(M_\mathrm{lip}) - \theta_\mathrm{req} $$
 
 ## This case

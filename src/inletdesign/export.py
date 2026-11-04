@@ -33,7 +33,14 @@ def export_dxf(geom, path, units="mm", include_shocks=True, metadata=None):
     doc = ezdxf.new(dxfversion="R2010")
     write_metadata(doc, metadata)
     doc.header["$INSUNITS"] = 4  # mm
+    write_geometry(doc, geom, include_shocks)
+    doc.saveas(path)
+    return path
 
+
+def write_geometry(doc, geom, include_shocks=True):
+    """Layers RAMP (polyline from the leading edge), COWL (line from the lip) and SHOCKS,
+    in millimetres, added to an ezdxf document."""
     doc.layers.add("RAMP", color=7)
     doc.layers.add("COWL", color=5)
     if include_shocks:
@@ -54,6 +61,3 @@ def export_dxf(geom, path, units="mm", include_shocks=True, metadata=None):
     if include_shocks:
         for p0, p1 in geom.shocks:
             msp.add_line(_to_mm(p0), _to_mm(p1), dxfattribs={"layer": "SHOCKS"})
-
-    doc.saveas(path)
-    return path

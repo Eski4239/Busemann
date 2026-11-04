@@ -7,7 +7,27 @@ from inletdesign import api
 
 from .content import OneBased
 
-TOPICS = ("method", "offdesign")
+TOPICS = ("method", "offdesign", "separation")
+
+
+def separation_lines(checks):
+    """One plain line per shock check (the separation entry's "This case")."""
+    out = []
+    for c in checks:
+        name = c.shock[:1].upper() + c.shock[1:]
+        if not c.applicable:
+            out.append(f"{name}: not applicable (no boundary layer upstream).")
+        elif not c.in_range:
+            out.append(f"{name}: M₁ = {c.M1:.2f} is outside the criterion's range.")
+        elif c.kind == "normal":
+            verdict = "separation likely" if c.flagged else "no separation expected"
+            out.append(f"{name}: M₁ = {c.M1:.3f} against 1.3, {verdict} "
+                       f"({100 * c.margin:+.1f} %).")
+        else:
+            verdict = "separation likely" if c.flagged else "no separation expected"
+            out.append(f"{name}: p₂/p₁ = {c.value:.3f} against {c.threshold:.3f} at "
+                       f"M₁ = {c.M1:.3f}, {verdict} ({100 * c.margin:+.1f} %).")
+    return out
 
 
 def entry_for(kind, index, view, n_regions):
@@ -62,4 +82,6 @@ def topic_context(topic, design, off=None, fs=None, off_fs=None):
     view = "offdesign" if topic == "offdesign" else "design"
     _, context = build_context(design, off, fs, off_fs, view)
     context.update(sel=off if topic == "offdesign" else design)
+    if topic == "separation":
+        context.update(sep_lines=separation_lines(design.separation))
     return topic, context

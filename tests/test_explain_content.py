@@ -44,7 +44,7 @@ def _render_all():
         for kind, index in _items(result):
             name, ctx = build_context(d, off, fs, off_fs, view, kind, index)
             yield label, (kind, index), name, ctx, C.render(C.load(name), ctx)
-        for topic in ("method", "offdesign"):
+        for topic in ("method", "offdesign", "separation"):
             if topic == "offdesign" and off is None:
                 continue
             name, ctx = topic_context(topic, d, off, fs, off_fs)
@@ -59,10 +59,11 @@ def test_every_entry_parses_with_sourced_relations():
         assert sources, name
         for tex, source in sources:
             assert source, (name, tex)
-            assert (source.startswith(("NACA Report 1135", "Oswatitsch"))
+            assert (source.startswith(("NACA Report 1135", "Oswatitsch", "Korkegi",
+                                       "Seddon"))
                     or source.startswith("definition used by this tool")), (name, source)
-            if source.startswith("Oswatitsch"):
-                assert "pending user confirmation" in source          # TM 1140 not confirmed
+            if source.startswith(("Oswatitsch", "Korkegi", "Seddon")):
+                assert "pending user confirmation" in source          # not yet confirmed
             if source.startswith("NACA Report 1135"):
                 assert "pending" not in source, (name, source)      # all confirmed (M6)
         text = C.entry_text(name)

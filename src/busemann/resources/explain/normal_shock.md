@@ -16,7 +16,7 @@ $$ p_2/p_1 = {{sel.p2_p1:.4f}},\quad T_2/T_1 = {{sel.T2_T1:.4f}} $$
 $$ p_{02}/p_{01} = {{sel.p0_ratio:.4f}}\quad(\mathrm{loss}\;{{sel.p0_loss:.4f}}) $$
 
 ## In plain words
-After the ramp shocks the flow is still supersonic (M = {{sel.M1:.4f}}). The terminal normal shock at the throat makes it subsonic (M = {{sel.M2:.4f}}) so it can enter the diffuser. A normal shock is the strongest possible shock for its Mach number, which is why the ramps first slow the flow down: the closer M1 is to 1, the smaller this loss.
+After the ramp shocks the flow is still supersonic (M = {{sel.M1:.4f}}). The terminal normal shock at the throat makes it subsonic (M = {{sel.M2:.4f}}) so it can enter the diffuser. A normal shock is the strongest possible shock for its Mach number, which is why the ramps first slow the flow down: the closer M₁ is to 1, the smaller this loss.
 
 ## Assumptions
 - One-dimensional, steady, inviscid flow through the shock

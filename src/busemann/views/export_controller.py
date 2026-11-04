@@ -30,6 +30,9 @@ class ExportController(QObject):
         self.actions = {}
         add = self._add
         add(menu, "geometry", "Geometry DXF…", self.export_geometry)
+        add(menu, "iges", "Geometry IGES…", self.export_iges)
+        add(menu, "points", "Wall points CSV…", self.export_points)
+        add(menu, "gmsh", "Gmsh geometry (.geo)…", self.export_gmsh)
         add(menu, "cfd", "CFD domain DXF (design)…", self.export_cfd)
         add(menu, "cfd_off", "CFD domain DXF (off-design v2)…", self.export_cfd_offdesign)
         menu.addSeparator()
@@ -94,11 +97,41 @@ class ExportController(QObject):
         path = self._path("Export geometry DXF", default_name(self.state.inputs, "geometry",
                                                                "dxf"), "DXF drawing (*.dxf)")
         if path:
+            from .. import project as P
+
             meta = self._meta("geometry DXF")
-            export_dxf(api.inlet_geometry(self.state.design), path,
-                       metadata=meta)
+            meta.pop("inputs", None)                 # the inputs go in as BUSEMANN_* keys
+            P.save(path, self.state.inputs, self.window.project.view(),
+                   design=self.state.design, metadata=meta)     # reopens as the design
             self._notes(path, meta)
             return self._done(path)
+
+    def _cad(self, title, kind, ext, file_filter, writer, what):
+        path = self._path(title, default_name(self.state.inputs, kind, ext), file_filter)
+        if path:
+            meta = self._meta(what)
+            writer(api.inlet_geometry(self.state.design), path, meta)
+            self._notes(path, meta)
+            return self._done(path)
+        return None
+
+    def export_iges(self):
+        from inletdesign.export_cad import export_iges
+
+        return self._cad("Export geometry IGES", "geometry", "igs", "IGES (*.igs *.iges)",
+                         export_iges, "geometry IGES (entity 110 lines, mm)")
+
+    def export_points(self):
+        from inletdesign.export_cad import export_points_csv
+
+        return self._cad("Export wall points CSV", "wall_points", "csv", "CSV (*.csv)",
+                         export_points_csv, "wall points CSV (m)")
+
+    def export_gmsh(self):
+        from inletdesign.export_cad import export_gmsh_geo
+
+        return self._cad("Export Gmsh geometry", "geometry", "geo", "Gmsh geometry (*.geo)",
+                         export_gmsh_geo, "Gmsh .geo (m)")
 
     def export_cfd(self):
         path = self._path("Export CFD domain DXF", default_name(self.state.inputs,

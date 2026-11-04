@@ -9,11 +9,17 @@ from busemann.charts import model  # noqa: E402
 pytestmark = pytest.mark.gui
 
 
-def test_about_dialog_tabs(qtbot, window):
+def test_about_dialog_sections(qtbot, window):
+    from busemann.views import about_dialog as A
+
     dialog = window.show_about()
     qtbot.addWidget(dialog)
-    assert [dialog.tabs.tabText(i) for i in range(3)] == ["About", "Validation", "Licences"]
-    assert "Busemann" in dialog.about_label.text() and "inviscid" in dialog.about_label.text()
+    text = dialog.about_label.text()
+    assert "I made Busemann" in text and "inviscid" in text
+    assert "[your words here]" in text and len(A.ABOUT_ASSUMPTIONS) == 3
+    assert not dialog.licences.isVisibleTo(dialog)               # licences collapsed
+    dialog.licences_toggle.setChecked(True)
+    assert dialog.licences.isVisibleTo(dialog)
     table = dialog.validation_table
     phases = model.load_validation()["phases"]
     assert table.rowCount() == len(phases)
@@ -34,3 +40,17 @@ def test_help_menu_has_about(window):
     menus = [a.text().replace("&", "") for a in window.menuBar().actions()]
     assert menus == ["File", "Edit", "Help"]
     assert window.about_action.text().replace("&", "") == "About Busemann…"
+
+
+def test_about_text_is_plain():
+    import re
+
+    from busemann.views import about_dialog as A
+
+    text = " ".join([A.ABOUT_TEXT, A.MAKER_TEXT, *A.ABOUT_ASSUMPTIONS])
+    for word in ("comprehensive", "robust", "powerful", "seamless", "cutting-edge",
+                 "state-of-the-art", "leverage"):
+        assert word not in text.lower(), word
+    assert not re.search(r"—[^—]*—", text)                        # no em-dash chains
+    assert "—" not in text
+    assert A.ABOUT_TEXT.count(". ") + 1 <= 3                      # 2-3 sentences

@@ -35,9 +35,11 @@ class DesignPanel(QWidget):
                                       str(i.n_ramps))
         self.ramps.setToolTip(tip("design.ramps"))
         self.method = SegmentedControl(
-            [("oswatitsch", "Oswatitsch optimum"), ("custom", "Custom angles")], i.method
+            [("oswatitsch", "Optimum angles"), ("custom", "Custom angles")], i.method
         )
         self.method.setToolTip(tip("design.method"))
+        self.method.button("oswatitsch").setToolTip(tip("design.method_optimum"))
+        self.method.button("custom").setToolTip(tip("design.method_custom"))
 
         self.custom_box = QWidget()
         custom_form = _form(self.custom_box)

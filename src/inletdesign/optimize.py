@@ -42,7 +42,7 @@ def equal_strength_ramps(M_inf, n_ramps, Mn, gamma=1.4):
         if beta_deg > beta_at_theta_max:
             raise ValueError(
                 f"Mn={Mn} at M={M} requires beta={beta_deg:.4f} deg, which is on the "
-                f"strong branch (β at θ_max = {beta_at_theta_max:.4f}°); "
+                f"strong branch (β at θmax = {beta_at_theta_max:.4f}°); "
                 "equal-strength ramps require weak, attached shocks"
             )
         theta_deg = obl.theta_from_beta(M, beta_deg, gamma)
@@ -76,7 +76,7 @@ def optimize_equal_strength(M_inf, n_ramps, gamma=1.4, max_turn_deg=None):
     if max_turn_deg is None or sum(result["ramps"]) <= max_turn_deg:
         return result
     if not max_turn_deg > 0:
-        raise ValueError(f"max cowl angle must be > 0 deg (got {max_turn_deg:g})")
+        raise ValueError(f"max cowl angle must be > 0° (got {max_turn_deg:g}°)")
 
     def excess(Mn):
         return sum(equal_strength_ramps(M_inf, n_ramps, Mn, gamma)) - max_turn_deg

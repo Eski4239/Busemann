@@ -72,7 +72,9 @@ def test_drag_sets_snapped_angle_shows_no_go_and_is_one_undo_step(qtbot, custom)
     t_max = canvas.corner_drag["theta_max"]
     assert t_max == pytest.approx(api.max_deflection(M_k), abs=1e-12)
     flow_in = canvas.corner_drag["flow_in"]
-    assert canvas.no_go_angles() == pytest.approx((flow_in + t_max, flow_in + 90.0))
+    hi = canvas.corner_drag["bounds"].hi                 # the stop: below detachment
+    assert hi <= t_max - 0.5 + 1e-12
+    assert canvas.no_go_angles() == pytest.approx((flow_in + hi, flow_in + 90.0))
     custom.grab()                                                     # paints the wedge
     _mouse(canvas, QEvent.Type.MouseMove, _pointer(canvas, 1, 12.04), Qt.MouseButton.LeftButton,
            Qt.KeyboardModifier.ShiftModifier)
@@ -89,14 +91,66 @@ def test_drag_sets_snapped_angle_shows_no_go_and_is_one_undo_step(qtbot, custom)
     assert state.inputs.custom_angles == (9.0, 10.0)
 
 
-def test_drag_is_clamped_below_detachment(qtbot, custom):
+def test_drag_stops_at_the_upper_bound_with_a_note_and_comes_back(qtbot, custom):
     canvas, state = custom.canvas, custom.state
-    canvas.start_corner_drag(0)
-    t_max = canvas.corner_drag["theta_max"]
-    theta = canvas.drag_corner_to(_pointer(canvas, 0, t_max + 15.0))
-    assert theta < t_max and t_max - theta < 0.1 + 1e-9
+    canvas.start_corner_drag(1)                          # ramp 2: detachment-limited
+    b = canvas.corner_drag["bounds"]
+    assert b.reason == "detachment"
+    theta = canvas.drag_corner_to(_pointer(canvas, 1, b.hi + 15.0))
+    assert theta == pytest.approx(math.floor(b.hi * 10 + 1e-9) / 10)
+    assert canvas.limit_note == f"Limit: detachment at {b.limit_deg:.2f}°"
+    assert canvas.limit_note.startswith("Limit: detachment at ")
+    custom.grab()                                        # paints the note
+    back = canvas.drag_corner_to(_pointer(canvas, 1, 12.0))
+    assert back == 12.0 and canvas.limit_note is None    # dragging back works at once
+    canvas.drag_corner_to(_pointer(canvas, 1, b.hi + 5.0))
     canvas.finish_corner_drag()
-    assert state.inputs.custom_angles[0] == theta      # ramp 2 may then be infeasible
+    assert canvas.limit_note is not None                 # still visible after release...
+    qtbot.waitUntil(lambda: canvas.limit_note is None, timeout=3000)   # ...then fades out
+    qtbot.waitUntil(lambda: state.design is not None and state.design_error is None,
+                    timeout=5000)
+
+
+def test_drag_stops_at_the_lower_bound(qtbot, custom):
+    canvas = custom.canvas
+    canvas.start_corner_drag(0)
+    theta = canvas.drag_corner_to(_pointer(canvas, 0, -10.0))
+    assert theta == 0.5 and canvas.limit_note == "Limit: 0.5° minimum"
+    canvas.finish_corner_drag()
+
+
+def test_downstream_limit_keeps_the_design_valid(qtbot, window):
+    """Raising ramp 1 at M 1.8 with 3 ramps used to make the flow behind it subsonic: the
+    design errored and every handle vanished mid-drag."""
+    with qtbot.waitSignal(window.state.design_ready, timeout=5000):
+        window.state.update(mach=1.8, n_ramps=3, method="custom", custom_angles=(5.0, 5.0, 5.0))
+    canvas, state = window.canvas, window.state
+    canvas.start_corner_drag(0)
+    b = canvas.corner_drag["bounds"]
+    assert b.reason == "downstream" and b.detail.startswith("ramp 2 reaches its limit")
+    canvas.drag_corner_to(_pointer(canvas, 0, 40.0))
+    canvas.finish_corner_drag()
+    qtbot.waitUntil(lambda: state.design is not None
+                    and state.design.ramp_angles_deg[0] == state.inputs.custom_angles[0],
+                    timeout=5000)
+    assert state.design_error is None and len(canvas.corner_handles()) == 3
+
+
+@pytest.mark.parametrize("M, n", [(3.0, 2), (1.8, 3), (2.2, 4), (2.5, 4)])
+def test_full_sweep_of_every_handle_never_errors(qtbot, window, M, n):
+    with qtbot.waitSignal(window.state.design_ready, timeout=5000):
+        window.state.update(mach=M, n_ramps=n, method="custom", custom_angles=(5.0,) * n)
+    canvas, state = window.canvas, window.state
+    for k in range(n):
+        qtbot.waitUntil(lambda: len(canvas.corner_handles()) == n, timeout=5000)
+        canvas.start_corner_drag(k)
+        for theta in (1.0, 10.0, 20.0, 35.0, 60.0, 3.0):
+            canvas.drag_corner_to(_pointer(canvas, k, theta))
+        canvas.finish_corner_drag()
+        qtbot.waitUntil(lambda: state.design is not None
+                        and state.design.ramp_angles_deg == state.inputs.custom_angles,
+                        timeout=5000)
+        assert state.design_error is None
 
 
 def test_recovery_and_gap_update_live(qtbot, custom):
@@ -110,3 +164,12 @@ def test_recovery_and_gap_update_live(qtbot, custom):
     assert card.text() == f"{state.design.recovery_total:.4f}"
     assert card.note("gap").startswith("Recovery ")
     canvas.finish_corner_drag()
+
+
+def test_method_buttons_are_named_and_explained(window):
+    method = window.design_panel.method
+    assert method.button("oswatitsch").text() == "Optimum angles"
+    assert method.button("oswatitsch").toolTip() == (
+        "Oswatitsch optimum: equal-strength shocks, maximum total-pressure recovery for this "
+        "number of ramps.")
+    assert method.button("custom").toolTip() == "Set each ramp angle yourself."

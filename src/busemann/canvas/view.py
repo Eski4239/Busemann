@@ -12,17 +12,19 @@ off-design canvas a Space tap (no pan in between) emits space_tapped (play / pau
 import math
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, Qt, QVariantAnimation, Signal
-from PySide6.QtGui import QBrush, QPainter, QPainterPath, QPen, QTransform
+from PySide6.QtGui import QBrush, QColor, QPainter, QPainterPath, QPen, QTransform
 from PySide6.QtWidgets import QFrame, QGraphicsView, QLabel
 
 from inletdesign import api
 from inletdesign import units as _units
 
+from ..crashlog import guarded
 from ..theme import qt as theme
 from ..theme import tokens
 from ..tooltips import tip
 from ..views import format as fmt
 from ..views.rows import cowl_rows, region_rows, shock_rows
+from . import colors as _colors
 from . import picture as P
 from .hover_card import HoverCard
 from .scene import M, S, InletScene, color
@@ -31,9 +33,14 @@ _ZOOM_STEP = 1.15
 _SCALE_LIMITS = (0.02, 400.0)     # screen px per mm
 _LEGEND_W = 116                   # legend card width, px (fits '1.95–2.02')
 _LEGEND_ROW_H = 20                # px per Mach bin in the legend
+_CONT_LEGEND_W = 170              # continuous legend card (off-design view)
+_CONT_BAR_H = 150
+CONTINUOUS_LEGEND_TITLE = "Mach (off-design view)"
 HANDLE_R = 5                      # corner handle radius, px
 HANDLE_PICK_PX = 9                # handle pick distance, px
+PAN_START_PX = 4                  # a background left drag longer than this pans
 SNAP_DEG, FINE_SNAP_DEG = 0.1, 0.01
+LIMIT_FADE_MS = 1200              # the "Limit: ..." note fades out over this after release
 
 
 def snap_angle(theta, fine=False):
@@ -114,8 +121,17 @@ class InletCanvas(QGraphicsView):
         self._press_at = None
         self._space = False
         self._space_panned = False
+        self._bg_press = False       # the left press landed on empty background
         self.corner_drag = None      # dict while a ramp corner is dragged
         self.hovered_handle = None
+        self.limit_note = None       # "Limit: ..." beside a stopped handle
+        self._limit_k = None
+        self._limit_opacity = 1.0
+        self._limit_fade = QVariantAnimation(self)
+        self._limit_fade.setDuration(LIMIT_FADE_MS)
+        self._limit_fade.setStartValue(1.0)
+        self._limit_fade.setEndValue(0.0)
+        self._limit_fade.valueChanged.connect(self._on_limit_fade)
 
         if mode == "offdesign":
             state.off_design_ready.connect(lambda *_: self._on_result(state.design,
@@ -128,6 +144,7 @@ class InletCanvas(QGraphicsView):
             self._on_result(state.design, state.design_error)
 
     # --- results -------------------------------------------------------------------------
+    @guarded(lambda self: self.abort_interaction())
     def _on_result(self, result, error):
         if result is None:
             self._show_error(error or "design failed")
@@ -182,6 +199,8 @@ class InletCanvas(QGraphicsView):
 
     def _render(self, sk):
         pic = P.build(sk)
+        if self.mode == "offdesign":           # continuous colours, fixed over the sweep
+            self.inlet_scene.continuous_range = self.continuous_range(sk)
         new_states = self._shown is None or sk.regions is not self._shown.regions
         self.inlet_scene.set_picture(pic, self.state.inputs.units)
         self._shown = sk
@@ -241,7 +260,8 @@ class InletCanvas(QGraphicsView):
         """Viewport area for the drawing: everything left of the legend card."""
         vp = self.viewport().rect()
         if self.legend_visible():
-            vp.setRight(vp.right() - (_LEGEND_W + 2 * tokens.LEGEND_INSET_PX))
+            w = _CONT_LEGEND_W if self.mode == "offdesign" else _LEGEND_W
+            vp.setRight(vp.right() - (w + 2 * tokens.LEGEND_INSET_PX))
         return QRectF(vp)
 
     def fit(self, pic=None):
@@ -278,9 +298,19 @@ class InletCanvas(QGraphicsView):
     def legend_visible(self):
         return self.inlet_scene.picture is not None and self.inlet_scene.layer_visible("regions")
 
+    def continuous_range(self, sk=None):
+        """(lo, hi) of the off-design colour scale: 0.3 to the slider's top (design + 1.5)."""
+        d = self.state.design
+        top = d.inputs.M if d is not None else (sk.mach if sk is not None else 3.0)
+        return tokens.MACH_CONTINUOUS_LO, top + 1.5
+
     def legend_rect(self):
-        rows = max(1, len(self.inlet_scene.mach_edges) - 1)
         vp = self.viewport()
+        if self.inlet_scene.continuous_range is not None:
+            h = 36 + _CONT_BAR_H + 12
+            return QRectF(vp.width() - tokens.LEGEND_INSET_PX - _CONT_LEGEND_W,
+                          tokens.LEGEND_INSET_PX, _CONT_LEGEND_W, h)
+        rows = max(1, len(self.inlet_scene.mach_edges) - 1)
         h = 36 + rows * _LEGEND_ROW_H + 12
         return QRectF(vp.width() - tokens.LEGEND_INSET_PX - _LEGEND_W, tokens.LEGEND_INSET_PX,
                       _LEGEND_W, h)
@@ -433,24 +463,40 @@ class InletCanvas(QGraphicsView):
         d = self.state.design
         _, pivot, _ = self.corner_handles()[k]
         M_k = d.regions[k].M
+        bounds = api.ramp_angle_bounds(d, k)          # fixed for the whole drag
         self.corner_drag = dict(k=k, pivot=pivot, flow_in=d.flow_angles_deg[k], M=M_k,
                                 theta_max=api.max_deflection(M_k, d.inputs.gamma),
-                                theta=d.ramp_angles_deg[k], auto_fit=self._auto_fit)
+                                bounds=bounds, theta=d.ramp_angles_deg[k], at_limit=None,
+                                auto_fit=self._auto_fit, animations=self.animations_enabled)
         self._auto_fit = False             # the view must not rescale under the pointer
+        self.animations_enabled = False    # each drag step snaps (no 150 ms transitions)
+        self._limit_fade.stop()
+        self.limit_note = None
         self.hover_card.hide()
         self.corner_drag_started.emit(k)
         self.viewport().update()
 
     def drag_corner_to(self, view_pos, fine=False):
-        """Set theta_k from a pointer position (snapped, clamped below the detachment
-        limit and above 0). Returns the angle used."""
+        """Set theta_k from a pointer position: snapped (0.1°, Shift 0.01°) and clamped to the
+        ramp's fixed bounds (api.ramp_angle_bounds), so the design stays valid. At a bound
+        the handle stops and `limit_note` says why. Returns the angle used."""
         drag = self.corner_drag
         inverse, _ = self.viewportTransform().inverted()      # sub-pixel, unlike mapToScene
         pointer = M(inverse.map(QPointF(view_pos)))
         step = FINE_SNAP_DEG if fine else SNAP_DEG
-        theta = snap_angle(ramp_theta(drag["pivot"], pointer, drag["flow_in"]), fine)
-        top = math.floor((drag["theta_max"] - 1e-6) / step) * step
-        theta = round(min(max(theta, step), top), 10)
+        raw = ramp_theta(drag["pivot"], pointer, drag["flow_in"])
+        b = drag["bounds"]
+        lo = math.ceil(b.lo / step - 1e-9) * step
+        hi = math.floor(b.hi / step + 1e-9) * step
+        theta = snap_angle(raw, fine)
+        if theta >= hi:
+            theta, drag["at_limit"] = hi, "hi"
+        elif theta <= lo:
+            theta, drag["at_limit"] = lo, "lo"
+        else:
+            drag["at_limit"] = None
+        theta = round(theta, 10)
+        self.limit_note = self._limit_text(drag) if drag["at_limit"] else None
         if theta != drag["theta"]:
             drag["theta"] = theta
             angles = list(self.state.inputs.custom_angles)
@@ -459,12 +505,31 @@ class InletCanvas(QGraphicsView):
         self.viewport().update()
         return theta
 
+    @staticmethod
+    def _limit_text(drag):
+        if drag["at_limit"] == "lo":
+            return f"Limit: {drag['bounds'].lo:g}° minimum"
+        return f"Limit: {drag['bounds'].detail}"
+
+    def abort_interaction(self):
+        """After a logged error in a handler: end any drag or pan so the canvas stays usable."""
+        self._pan_from = None
+        self._press_at = None
+        self._bg_press = False
+        if self.corner_drag is not None:
+            self.finish_corner_drag()
+        self.viewport().unsetCursor()
+
     def finish_corner_drag(self):
         if self.corner_drag is None:
             return
-        auto = self.corner_drag["auto_fit"]
+        drag = self.corner_drag
         self.corner_drag = None
-        self._auto_fit = auto
+        self._auto_fit = drag["auto_fit"]
+        self.animations_enabled = drag["animations"]
+        if self.limit_note:                # the limit note fades out after release
+            self._limit_k = drag["k"]
+            self._limit_fade.start()
         self.corner_drag_finished.emit()
         self.viewport().update()
 
@@ -476,20 +541,53 @@ class InletCanvas(QGraphicsView):
         for k, _, end in self.corner_handles():
             q = QPointF(self.mapFromScene(S(end)))
             active = (drag is not None and drag["k"] == k) or self.hovered_handle == k
-            painter.setPen(QPen(color("accent"), 2))
-            painter.setBrush(color("accent") if active else color("surface"))
+            stopped = drag is not None and drag["k"] == k and drag["at_limit"]
+            painter.setPen(QPen(color("warn" if stopped else "accent"), 2))
+            painter.setBrush(color("warn" if stopped else "accent") if active
+                             else color("surface"))
             painter.drawEllipse(q, HANDLE_R, HANDLE_R)
+        self._draw_limit_note(painter)
+
+    def _draw_limit_note(self, painter):
+        """Small inline warning beside the stopped handle (fades after release)."""
+        if not self.limit_note:
+            return
+        k = self.corner_drag["k"] if self.corner_drag is not None else self._limit_k
+        q = self.handle_view_pos(k)
+        if q is None:
+            return
+        opacity = 1.0 if self.corner_drag is not None else self._limit_opacity
+        if opacity <= 0.0:
+            return
+        painter.save()
+        painter.setOpacity(opacity)
+        painter.setFont(theme.ui_font(tokens.SIZE_LABEL))
+        fm = painter.fontMetrics()
+        w = fm.horizontalAdvance(self.limit_note) + 16
+        box = QRectF(q.x() + 10, q.y() - 30, w, 20)
+        painter.setPen(QPen(color("warn"), 1))
+        painter.setBrush(color("surface"))
+        painter.drawRoundedRect(box, tokens.RADIUS, tokens.RADIUS)
+        painter.setPen(color("text"))
+        painter.drawText(box, Qt.AlignmentFlag.AlignCenter, self.limit_note)
+        painter.restore()
+
+    def _on_limit_fade(self, value):
+        self._limit_opacity = float(value)
+        if self._limit_opacity <= 0.0:
+            self.limit_note = None
+        self.viewport().update()
 
     def _draw_no_go(self, painter, drag):
-        """Shaded wedge from theta_max(M_k) to 90° past the incoming flow at that corner."""
+        """Shaded wedge past the ramp's upper bound (detachment limit, 30° cap or a downstream
+        limit), from that direction to 90° past the incoming flow at the corner."""
         pv = QPointF(self.mapFromScene(S(drag["pivot"])))
         end = self.handle_view_pos(drag["k"])
         r = max(80.0, 1.4 * math.hypot(end.x() - pv.x(), end.y() - pv.y())) if end else 120.0
-        start = drag["flow_in"] + drag["theta_max"]
-        span = 90.0 - drag["theta_max"]
+        start, stop = self.no_go_angles()
         rect = QRectF(pv.x() - r, pv.y() - r, 2 * r, 2 * r)
         path = QPainterPath(pv)
-        path.arcTo(rect, start, span)
+        path.arcTo(rect, start, stop - start)
         path.closeSubpath()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(color("error", 0.12))
@@ -501,27 +599,27 @@ class InletCanvas(QGraphicsView):
         painter.setPen(dashed)
         painter.drawLine(pv, edge)
         painter.setFont(theme.mono_font(tokens.SIZE_LABEL))
-        for row, (token, text) in enumerate((
-                ("text", f"θ{drag['k'] + 1} {drag['theta']:.2f}°"),
-                ("error", f"limit θmax {drag['theta_max']:.2f}° (M {drag['M']:.2f})"))):
-            painter.setPen(color(token))
-            painter.drawText(QRectF(pv.x() + 8, pv.y() + 6 + 16 * row, 260, 16),
-                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, text)
+        painter.setPen(color("text"))
+        painter.drawText(QRectF(pv.x() + 8, pv.y() + 6, 260, 16),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                         f"θ{drag['k'] + 1} {drag['theta']:.2f}°")
 
     def no_go_angles(self):
         """(start, end) absolute directions (deg, model) of the shaded wedge while dragging."""
         drag = self.corner_drag
         if drag is None:
             return None
-        return drag["flow_in"] + drag["theta_max"], drag["flow_in"] + 90.0
+        return drag["flow_in"] + drag["bounds"].hi, drag["flow_in"] + 90.0
 
     # --- events --------------------------------------------------------------------------
+    @guarded(lambda self: self.abort_interaction())
     def wheelEvent(self, event):
         steps = event.angleDelta().y() / 120.0
         if steps:
             self.zoom(_ZOOM_STEP ** steps)
         event.accept()
 
+    @guarded(lambda self: self.abort_interaction())
     def mousePressEvent(self, event):
         button = event.button()
         if button == Qt.MouseButton.LeftButton and not self._space:
@@ -539,8 +637,11 @@ class InletCanvas(QGraphicsView):
             return
         if button == Qt.MouseButton.LeftButton:
             self._press_at = event.position()
+            # on empty background a left drag pans (an item press stays a click / select)
+            self._bg_press = self.pick(event.position())[0] is None
         super().mousePressEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def mouseMoveEvent(self, event):
         if self.corner_drag is not None:
             fine = bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier)
@@ -556,6 +657,12 @@ class InletCanvas(QGraphicsView):
             self.viewport().setCursor(Qt.CursorShape.SizeAllCursor)
             event.accept()
             return
+        if (self._pan_from is None and self._bg_press and self._press_at is not None
+                and event.buttons() & Qt.MouseButton.LeftButton
+                and (event.position() - self._press_at).manhattanLength() >= PAN_START_PX):
+            self._pan_from = self._press_at          # background drag: start panning
+            self.hover_card.hide()
+            self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
         if self._pan_from is not None:
             delta = event.position() - self._pan_from
             self._pan_from = event.position()
@@ -567,6 +674,7 @@ class InletCanvas(QGraphicsView):
         self._hover(event.position())
         super().mouseMoveEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def mouseReleaseEvent(self, event):
         if self.corner_drag is not None and event.button() == Qt.MouseButton.LeftButton:
             self.finish_corner_drag()
@@ -574,6 +682,8 @@ class InletCanvas(QGraphicsView):
             return
         if self._pan_from is not None:
             self._pan_from = None
+            self._press_at = None
+            self._bg_press = False
             self.viewport().unsetCursor()
             event.accept()
             return
@@ -584,6 +694,7 @@ class InletCanvas(QGraphicsView):
                 self.select(*self.pick(event.position()))
         super().mouseReleaseEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def mouseDoubleClickEvent(self, event):
         self.fit()
         event.accept()
@@ -595,6 +706,7 @@ class InletCanvas(QGraphicsView):
             return True
         return super().event(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_F:
             self.fit()
@@ -605,6 +717,7 @@ class InletCanvas(QGraphicsView):
         else:
             super().keyPressEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def keyReleaseEvent(self, event):
         if event.key() == Qt.Key.Key_Space and not event.isAutoRepeat():
             self._space = False
@@ -614,11 +727,13 @@ class InletCanvas(QGraphicsView):
         else:
             super().keyReleaseEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def leaveEvent(self, event):
         self.hover_card.hide()
         self.hovered = (None, None)
         super().leaveEvent(event)
 
+    @guarded(lambda self: self.abort_interaction())
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._place_overlay()
@@ -626,6 +741,7 @@ class InletCanvas(QGraphicsView):
             self.fit()
 
     # --- background grid, foreground legend / scale bar ---------------------------------
+    @guarded(lambda self: self.abort_interaction())
     def drawBackground(self, painter, rect):
         painter.fillRect(rect, QBrush(color("surface")))
         if not self.grid_visible:
@@ -642,6 +758,7 @@ class InletCanvas(QGraphicsView):
             painter.drawLine(QPointF(rect.left(), y), QPointF(rect.right(), y))
             y += step
 
+    @guarded(lambda self: self.abort_interaction())
     def drawForeground(self, painter, rect):
         painter.save()
         painter.resetTransform()
@@ -655,8 +772,12 @@ class InletCanvas(QGraphicsView):
         painter.restore()
 
     def _draw_legend(self, painter):
-        """Discrete Mach legend on a translucent card, top-right; thin sonic line at M = 1."""
+        """Discrete Mach legend on a translucent card, top-right; thin sonic line at M = 1.
+        The off-design view draws its continuous scale instead."""
         scene = self.inlet_scene
+        if scene.continuous_range is not None:
+            self._draw_continuous_legend(painter)
+            return
         edges, colors = scene.mach_edges, scene.mach_colors
         card = self.legend_rect()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -692,6 +813,56 @@ class InletCanvas(QGraphicsView):
             y = bottom - k * _LEGEND_ROW_H
             painter.setPen(QPen(color("text"), 1.5))
             painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
+
+    def continuous_ticks(self):
+        """Tick values of the continuous legend (lo, 1, then supersonic steps, hi)."""
+        lo, hi = self.inlet_scene.continuous_range
+        step = nice_step((hi - 1.0) / 3.0)
+        ticks = [lo, 1.0]
+        k = 1
+        while 1.0 + k * step < hi - 0.3 * step:
+            ticks.append(round(1.0 + k * step, 6))
+            k += 1
+        return ticks + [hi]
+
+    def _draw_continuous_legend(self, painter):
+        lo, hi = self.inlet_scene.continuous_range
+        card = self.legend_rect()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QPen(color("border"), 1))
+        painter.setBrush(color("surface", tokens.LEGEND_ALPHA))
+        painter.drawRoundedRect(card.adjusted(0.5, 0.5, -0.5, -0.5), tokens.RADIUS, tokens.RADIUS)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setFont(theme.label_font())
+        painter.setPen(color("text_muted"))
+        painter.drawText(QRectF(card.left() + 10, card.top() + 8, card.width() - 20, 16),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                         CONTINUOUS_LEGEND_TITLE)
+        x, bar_w = card.left() + 12, 14
+        top, bottom = card.top() + 36, card.top() + 36 + _CONT_BAR_H
+
+        def y_of(M):                         # linear in M, highest Mach at the top
+            return bottom - (M - lo) / (hi - lo) * _CONT_BAR_H
+
+        for py in range(int(top), int(bottom)):
+            M = lo + (bottom - py - 0.5) / _CONT_BAR_H * (hi - lo)
+            painter.fillRect(QRectF(x, py, bar_w, 1), QColor(_colors.continuous(M, lo, hi)))
+        painter.setPen(QPen(color("border"), 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(QRectF(x, top, bar_w, _CONT_BAR_H))
+        painter.setFont(theme.mono_font(tokens.SIZE_LABEL))
+        for M in self.continuous_ticks():
+            y = y_of(M)
+            sonic = abs(M - 1.0) < 1e-9
+            painter.setPen(QPen(color("text" if sonic else "text_muted"), 1.5 if sonic else 1))
+            if sonic:
+                painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
+            else:
+                painter.drawLine(QPointF(x + bar_w, y), QPointF(x + bar_w + 3, y))
+            painter.setPen(color("text" if sonic else "text_muted"))
+            painter.drawText(QRectF(x + bar_w + 7, y - 8, card.right() - x - bar_w - 10, 16),
+                             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                             f"{M:.3g}")
 
     def legend_labels(self):
         """The class labels the legend draws, lowest Mach first (tests)."""
