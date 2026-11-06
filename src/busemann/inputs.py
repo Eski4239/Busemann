@@ -27,6 +27,7 @@ class Inputs:
     mdot_kgps: float = None             # required engine mass flow, kg/s (mass_flow mode)
     inlet_width_m: float = None         # inlet width (span), m; None = per metre only
     diffuser_recovery: float = 0.97     # subsonic diffuser p0 ratio (estimate)
+    cowl_frontal_height: float = 0.10   # cowl frontal height / h_c (drag estimate only)
 
 
 CAPTURE_MODES = ("height", "mass_flow")

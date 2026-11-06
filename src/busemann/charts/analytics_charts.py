@@ -20,13 +20,16 @@ PICK_PX = 8.0             # px: hover / click radius around a point
 N_COLORS = {0: tokens.COLORS["text_muted"], 1: "#93B4F2", 2: "#5B8DEF",
             3: tokens.COLORS["accent"], 4: "#1E3A8A"}
 SPECIAL = {"isentropic": tokens.COLORS["text"], "mil": tokens.COLORS["warn"],
-           "theta": tokens.COLORS["error"]}
+           "theta": tokens.COLORS["error"],
+           # drag (M9b): additive, cowl and their sum
+           "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"]}
+DASHED = ("isentropic", "mil", "theta", "total")
+BAND_ALPHA = 28
 
 
 def series_pen(key, width=2.0):
     color = N_COLORS[key] if isinstance(key, int) else SPECIAL[key]
-    style = Qt.PenStyle.DashLine if key in ("isentropic", "mil", "theta") else \
-        Qt.PenStyle.SolidLine
+    style = Qt.PenStyle.DashLine if key in DASHED else Qt.PenStyle.SolidLine
     pen = pg.mkPen(QColor(color), width=width, style=style)
     pen.setCosmetic(True)
     return pen
@@ -47,6 +50,8 @@ class TradeChart(QWidget):
         self.selected = None      # (key, index)
         self.last_hover = None    # text of the last hover tooltip
         self.vline = None
+        self.bands = []           # (lo, hi, label) of shaded "not computable" ranges
+        self._band_items = []
         self.title = field_label(title, tip_key)
         self.legend = QLabel()
         self.legend.setObjectName("chartLegend")
@@ -68,6 +73,7 @@ class TradeChart(QWidget):
             axis.setTextPen(_pen("text_muted", 1))
             axis.setTickFont(tick_font)
             axis.setLabel(label, color=tokens.COLORS["text_muted"])
+            axis.enableAutoSIPrefix(False)          # coefficients stay as plain numbers
         item.getAxis("left").setWidth(LEFT_AXIS_W + 14)
         self.plot.setToolTip(tip(tip_key))
         self.marker = pg.ScatterPlotItem(size=12, pen=pg.mkPen(_qc("text"), width=2),
@@ -97,6 +103,9 @@ class TradeChart(QWidget):
                 item.removeItem(s["label"])
         self.series = {}
         self.set_selected(None)
+        self.set_bands([])
+        self.marker.setData([])
+        self.marker_text = None
         if self.vline is not None:
             item.removeItem(self.vline)
             self.vline = None
@@ -109,29 +118,35 @@ class TradeChart(QWidget):
             item.removeItem(old["item"])
             if old["label"] is not None:
                 item.removeItem(old["label"])
-        curve = pg.PlotDataItem(list(xs), list(ys), pen=series_pen(key, width))
+        xs = [math.nan if v is None else float(v) for v in xs]
+        ys = [math.nan if v is None else float(v) for v in ys]
+        curve = pg.PlotDataItem(xs, ys, pen=series_pen(key, width), connect="finite")
         curve.setZValue(10 if isinstance(key, int) else 8)
         item.addItem(curve)
         text_item = None
-        if label and xs and self.end_labels:
+        finite = [k for k, (x, y) in enumerate(zip(xs, ys))
+                  if math.isfinite(x) and math.isfinite(y)]
+        if label and finite and self.end_labels:
             color = N_COLORS[key] if isinstance(key, int) else SPECIAL[key]
             text_item = pg.TextItem(label, color=QColor(color), anchor=(0.0, 0.5))
             text_item.setFont(theme.mono_font(10))
-            text_item.setPos(xs[-1], ys[-1])
+            text_item.setPos(xs[finite[-1]], ys[finite[-1]])
             item.addItem(text_item)
         self.series[key] = dict(x=tuple(xs), y=tuple(ys), text=text, item=curve,
                                 label=text_item, pickable=pickable, name=label)
         self._layout_axes()
 
     def _layout_axes(self):
-        xs = [x for s in self.series.values() for x in s["x"]]
+        xs = [x for s in self.series.values() for x in s["x"] if math.isfinite(x)]
         if not xs:
             return
         lo, hi = min(xs), max(xs)
         pad = 0.16 * (hi - lo) if self.end_labels else 0.02 * (hi - lo)
         for s in self.series.values():          # clear of the design ring at a curve's end
             if s["label"] is not None:
-                s["label"].setPos(s["x"][-1] + 0.02 * (hi - lo), s["y"][-1])
+                k = max(j for j, (x, y) in enumerate(zip(s["x"], s["y"]))
+                        if math.isfinite(x) and math.isfinite(y))
+                s["label"].setPos(s["x"][k] + 0.02 * (hi - lo), s["y"][k])
         self.plot.getPlotItem().setXRange(lo, hi + pad, padding=0.01)
         if not self.end_labels:
             self.legend.setText(self.legend_html())
@@ -147,10 +162,42 @@ class TradeChart(QWidget):
             if not s["name"]:
                 continue
             color = N_COLORS[key] if isinstance(key, int) else SPECIAL[key]
-            glyph = "╌╌" if not isinstance(key, int) else "━━"
+            glyph = "╌╌" if key in DASHED else "━━"
             parts.append(f'<span style="white-space:nowrap"><span style="color:{color}">'
                          f'{glyph}</span>&nbsp;{s["name"]}</span>')
         return "&nbsp;&nbsp; ".join(parts)
+
+    def set_bands(self, bands, token="error"):
+        """Shade x ranges [(lo, hi, label), ...] (e.g. where a value is not computable),
+        each labelled at the top of the plot."""
+        item = self.plot.getPlotItem()
+        for b in self._band_items:
+            item.removeItem(b)
+        self._band_items, self.bands = [], list(bands)
+        xs = [x for s in self.series.values() for x in s["x"] if math.isfinite(x)]
+        span = (max(xs) - min(xs)) if xs else 1.0
+        for lo, hi, label in self.bands:
+            region = pg.LinearRegionItem((lo, hi), movable=False,
+                                         brush=pg.mkBrush(_qc(token, BAND_ALPHA)),
+                                         pen=pg.mkPen(None))
+            region.setZValue(-5)
+            region.setToolTip(label)
+            item.addItem(region, ignoreBounds=True)
+            text = pg.TextItem(label, color=QColor(tokens.COLORS[token]), anchor=(0.5, 0.0))
+            text.setFont(theme.mono_font(9))
+            item.addItem(text, ignoreBounds=True)
+            text.setVisible(hi - lo >= 0.15 * span)     # narrow band: tooltip only
+            self._band_items += [region, text]
+        self.place_band_text()
+
+    def place_band_text(self):
+        """Band labels at the top of the current y range (call after the data changes)."""
+        (_, _), (_, y1) = self.plot.getPlotItem().vb.viewRange()
+        for item in self._band_items:
+            if isinstance(item, pg.TextItem):
+                region = self._band_items[self._band_items.index(item) - 1]
+                lo, hi = region.getRegion()
+                item.setPos(0.5 * (lo + hi), y1)
 
     def set_vline(self, x, label, token="error"):
         item = self.plot.getPlotItem()
@@ -197,6 +244,8 @@ class TradeChart(QWidget):
             if pickable_only and not s["pickable"]:
                 continue
             for i, (x, y) in enumerate(zip(s["x"], s["y"])):
+                if not (math.isfinite(x) and math.isfinite(y)):
+                    continue                                    # a gap (not computable)
                 p = self._scene_xy(x, y)
                 d = math.hypot(p.x() - scene_pos.x(), p.y() - scene_pos.y())
                 if best is None or d < best[2]:

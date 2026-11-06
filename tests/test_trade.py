@@ -181,3 +181,15 @@ def test_full_tab_data_under_a_second():
     elapsed = time.perf_counter() - t
     assert elapsed < 1.0, f"{elapsed:.3f} s"
     assert math.isfinite(elapsed)
+
+
+def test_isentropic_at_the_two_ramp_turn():
+    """M9b takeaway check: at M 3 and the 2-ramp optimum's cowl turn (33.789°) the
+    isentropic ramp reaches M_f = 1.6375 and recovers 0.8809 (values given by the user,
+    4-5 s.f.; nu(M_f) = nu(3) - delta is the closed-form check)."""
+    delta = api.design(3.0, 2).cowl_angle_deg
+    assert delta == pytest.approx(33.789, abs=5e-4)
+    c = api.isentropic_vs_turning(3.0, delta_grid=(delta,))
+    assert c.M_f[0] == pytest.approx(1.6375, abs=5e-5)
+    assert c.recovery[0] == pytest.approx(0.8809, abs=5e-5)
+    assert float(pm.nu(c.M_f[0])) == pytest.approx(float(pm.nu(3.0)) - delta, abs=1e-8)

@@ -57,6 +57,10 @@ VALIDATION_SUMMARY = (
     "was 4.9% lower at Mach 3.25).")
 MIL_SOURCE = ("MIL-E-5008B (1959), as given by NASA Glenn Research Center, 'Inlet "
               "Performance', https://www.grc.nasa.gov/WWW/BGH/inleth.html (formula confirmed)")
+DRAG_SOURCE = ("Additive drag as defined in M. Sibulkin, 'Theoretical and Experimental "
+               "Investigation of Additive Drag', NACA Report 1187 (1954) (pending "
+               "confirmation); cowl pressure drag: Busemann model choice (oblique-shock "
+               "relations, NACA Report 1135)")
 KORKEGI_TOOLTIP = (f"{_sep.KORKEGI_CRITERION}. Source: {_sep.KORKEGI_SOURCE}. "
                    f"Korkegi: {_sep.KORKEGI_SCOPE}.")
 
@@ -169,6 +173,16 @@ def items(design, inputs, fs=None, off=None, off_fs=None):
         "compute the subsonic diffuser",
         "User input (estimate)",
         _cfd("The engine-face recovery depends on this estimate")))
+    # M9b: what the drag estimate leaves out
+    out.append(VerificationItem(
+        "info", "drag", "Drag is an inviscid pressure-drag estimate",
+        "Additive drag: (p − p∞) along the dividing streamline from the free stream to the "
+        "lip; cowl drag: the oblique-shock pressure on the cowl's outer face over a frontal "
+        f"height of {getattr(inputs, 'cowl_frontal_height', 0.10):.2f} × capture height; "
+        "coefficients on q∞ × capture height",
+        DRAG_SOURCE,
+        _cfd("It excludes skin friction, subcritical spillage (terminal shock expelled), the "
+             "cowl beyond its frontal height and 3D effects")))
     # other model notices of the design point (subsonic duct, cowl angle limit, ...)
     covered = ("External cowl shock", "Cowl near shock detachment", "real-gas")
     notices = [(n, "design point") for n in design.notices]

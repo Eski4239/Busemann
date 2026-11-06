@@ -33,7 +33,7 @@ class _UnitSpin(QDoubleSpinBox):
         o = self._owner
         text = text.strip()
         if o.quantity is not None:
-            return parse_quantity(text, o.quantity, o.unit_label.text() or None)
+            return parse_quantity(text, o.quantity, o.unit or None)
         return float(text.replace(",", "."))
 
     # Qt virtuals: they must return a value of the right type, so each catches its own
@@ -73,7 +73,7 @@ class SpinField(QWidget):
     value_changed = Signal(float)
 
     def __init__(self, value=0.0, decimals=1, minimum=0.0, maximum=90.0, step=0.1,
-                 min_exclusive=False, unit="", quantity=None, parent=None):
+                 min_exclusive=False, unit="", quantity=None, unit_display=None, parent=None):
         super().__init__(parent)
         self.quantity = quantity
         self._min_exclusive = min_exclusive
@@ -92,7 +92,10 @@ class SpinField(QWidget):
         self.spin.setMinimumWidth(MIN_WIDTH)
         self.spin.setCorrectionMode(QDoubleSpinBox.CorrectionMode.CorrectToPreviousValue)
         self.edit = self.spin.lineEdit()
-        self.unit_label = QLabel(unit)
+        self.unit = unit                 # the unit typed values convert to ('' for none)
+        self.unit_label = QLabel(unit_display if unit_display is not None else unit)
+        if unit_display is not None:     # rich text, e.g. '× h<sub>c</sub>' (shown only)
+            self.unit_label.setTextFormat(Qt.TextFormat.RichText)
         self.unit_label.setObjectName("unit")
         self.unit_label.setFont(theme.mono_font(11))
         self.unit_label.setMinimumWidth(theme.tokens.space(4))
@@ -161,7 +164,7 @@ class SpinField(QWidget):
     # --- internals ------------------------------------------------------------------------
     def _limit_text(self, which):
         value = self.spin.maximum() if which == "max" else self.spin.minimum()
-        unit = self.unit_label.text()
+        unit = self.unit
         num = f"{value:.{self.spin.decimals()}f}".rstrip("0").rstrip(".")
         sep = "" if unit in ("°", "") else " "
         return f"{'Maximum' if which == 'max' else 'Minimum'} {num}{sep}{unit}"
@@ -196,7 +199,7 @@ class SpinField(QWidget):
 
     def _show_message(self, error=None):
         if error is None and self._min_exclusive and self.spin.value() <= self.spin.minimum():
-            error = f"Must be > {self.spin.minimum():g}{self.unit_label.text()}"
+            error = f"Must be > {self.spin.minimum():g}{self.unit}"
         error = error or self._external_error
         text = "\n".join(t for t in (self._note, error) if t)     # the clamp note stays
         self.error_label.setObjectName("fieldError" if error else "fieldNote")

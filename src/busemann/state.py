@@ -26,7 +26,7 @@ SWEEP_POINTS = 40
 
 
 # Fields that do not change any computed result.
-_DISPLAY_ONLY = {"units", "preset"}
+_DISPLAY_ONLY = {"units", "preset", "cowl_frontal_height"}   # last: drag views only
 # Fields evaluated on the frozen design by the light off-design job.
 _OFF_DESIGN_ONLY = {"off_design_mach"}
 

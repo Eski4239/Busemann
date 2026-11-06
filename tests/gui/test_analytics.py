@@ -48,8 +48,13 @@ def test_turning_view_draws_every_curve_and_the_theta_max_line(qtbot, window):
     d = window.state.design
     assert chart.marker_text[:2] == (d.cowl_angle_deg, d.recovery_total)
     assert not window.view_row.isVisibleTo(window)                  # canvas toggles hidden
-    window.tabs.setCurrentWidget(window.canvas)
-    assert window.view_row.isVisibleTo(window)
+    zoom = (window.zoom_in_action, window.zoom_out_action, window.fit_action)
+    assert not any(a.isVisible() for a in zoom) and not window.zoom_separator.isVisible()
+    window.tabs.setCurrentWidget(window.compare_tab)
+    assert not any(a.isVisible() for a in zoom) and not window.view_row.isVisibleTo(window)
+    for page in (window.canvas, window.offdesign_tab):
+        window.tabs.setCurrentWidget(page)
+        assert window.view_row.isVisibleTo(window) and all(a.isVisible() for a in zoom)
 
 
 def test_design_mach_view_curves_mil_and_cowl_chart(qtbot, window):
@@ -139,14 +144,16 @@ def test_isentropic_points_cannot_be_applied(qtbot, window):
 def test_takeaways_are_the_computed_helpers(qtbot, window):
     tab = _open(qtbot, window)
     optima, theta = tab.data["optima"], tab.data["theta"]
-    assert tab.turning_takeaway.text() == T.turning(3.0, optima, theta, 2)
+    equal = tab.data["equal_turn"]
+    assert tab.turning_takeaway.text() == T.turning(3.0, optima, theta, 2, equal[2])
+    assert tab.turning_takeaway.text().startswith("At the same 33.8° cowl turn as 2 ramps")
     assert tab.mach_takeaway.text() == T.design_mach(3.0, optima, 2)
     assert tab.cowl_takeaway.text() == T.cowl(3.0, optima, theta, 2)
     assert optima[2][0] == pytest.approx(window.state.design.recovery_total, abs=1e-12)
     with qtbot.waitSignal(window.state.design_ready, timeout=5000):
         window.state.update(n_ramps=3)                 # same (M, γ): only the text changes
     assert not tab.is_computing()
-    assert tab.turning_takeaway.text() == T.turning(3.0, optima, theta, 3)
+    assert tab.turning_takeaway.text() == T.turning(3.0, optima, theta, 3, equal[3])
 
 
 def test_progressive_results_cache_and_stale_generations(qtbot, window):

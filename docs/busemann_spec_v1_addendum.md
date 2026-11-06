@@ -77,7 +77,7 @@ menus or windows, never extra rows on existing panels unless listed here.
    buzz, cowl detachment, real gas, upper-bound recovery, drag estimates), each with
    severity, the criterion used, its source and "must be verified with a CFD solver".
 
-## D. Analytics tab (M9; D.1 in M9a) — all approximate items titled "(approximate)"
+## D. Analytics tab (M9; D.1 in M9a, D.2 in M9b) — all approximate items titled "(approximate)"
 
 1. **Trade study (M9a, shipped; exact within the model, no "approximate" label):** a
    segmented control "Recovery vs turning" | "Recovery vs design Mach".
@@ -98,9 +98,26 @@ menus or windows, never extra rows on existing panels unless listed here.
    - Computed on a worker thread, curve by curve, cached by (M, γ); the full tab takes
      under 1 s (core `api.trade_vs_turning`, `isentropic_vs_turning`,
      `trade_vs_design_mach`). The canvas layer toggles are hidden on this tab.
-2. **Cowl and additive (spillage) drag (approximate):** cowl external pressure drag and
-   additive drag vs M∞ for the current design; "not computable" where the cowl shock is
-   detached. Sources required.
+2. **Drag (M9b, shipped; labelled "inviscid estimate: pressure drag only, no skin
+   friction"):** coefficients per unit width on q∞ × capture height.
+   - *Additive drag* C_D,add = Σ (p_k − p∞) Δy_k / (q∞ h_c) along the dividing streamline
+     (freestream to the cowl lip, off-design region data); exactly 0 at and above the
+     design Mach. Checked by an independent x-momentum balance on the captured streamtube
+     (agreement to 1e-10 below design, n = 1–4). Definition source: Sibulkin, NACA Report
+     1187 (1954), pending confirmation.
+   - *Cowl pressure drag* C_D,cowl = (p_c − p∞) Δh_cowl / (q∞ h_c): the cowl's outer face
+     turns the lip's local flow by the required turn + lip wedge (as in the cowl check);
+     p_c = local p × oblique-shock p2/p1. Not computable (gap, shaded) when the cowl shock is
+     detached or the lip flow is subsonic. Δh_cowl = "Cowl frontal height" (Design ▸
+     Advanced, fraction of h_c, default 0.10, 0.01–1, display-only: no recompute).
+   - Analytics ▸ "Drag (inviscid estimate)": C_D,add, C_D,cowl and their sum vs M∞ with the
+     design-Mach line; recovery vs C_D,cowl at the design Mach along the n = 1–4 turning
+     curves and the isentropic curve (hover, pick + Apply); computed takeaways.
+   - Off-design "At slider Mach" card: C_D,add and C_D,cowl rows. Verification and
+     `verification_notes.md`: one item listing what the estimate excludes (skin friction,
+     subcritical spillage, the cowl beyond its frontal height, 3D effects).
+   - M9a fixes: the turning takeaway compares at equal turning first, then the
+     unconstrained optima; zoom / fit are hidden on the Analytics and Compare tabs.
 3. **Inlet characteristic and buzz (approximate):** recovery vs mass-flow ratio
    (supercritical / critical / subcritical), buzz onset marked with a named empirical
    criterion (e.g. Ferri–Nucci or Dailey). Sources required; model choices reviewed

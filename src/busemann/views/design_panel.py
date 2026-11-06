@@ -106,6 +106,13 @@ class DesignPanel(QWidget):
                                   step=0.01, min_exclusive=True, quantity="dimensionless")
         attach(self.diffuser, "field.diffuser")
         grid.addRow(field_label("Diffuser recovery (estimate)", "label.diffuser"), self.diffuser)
+        # M9b: the cowl's frontal height for the cowl pressure-drag estimate (Analytics)
+        self.cowl_height = SpinField(i.cowl_frontal_height, decimals=2, minimum=0.01,
+                                     maximum=1.0, step=0.01, quantity="dimensionless",
+                                     unit_display="× h<sub>c</sub>")
+        attach(self.cowl_height, "field.cowl_frontal_height")
+        grid.addRow(field_label("Cowl frontal height", "label.cowl_frontal_height"),
+                    self.cowl_height)
         self.advanced = CollapsibleSection("Advanced", advanced_box, collapsed=True,
                                            tooltip=tip("design.advanced"))
 
@@ -164,6 +171,8 @@ class DesignPanel(QWidget):
                                                                        state.inputs.units)))
         self.width_field.cleared.connect(lambda: state.update(inlet_width_m=None))
         self.diffuser.value_changed.connect(lambda v: state.update(diffuser_recovery=v))
+        self.cowl_height.value_changed.connect(
+            lambda v: state.update(cowl_frontal_height=v))
         state.inputs_changed.connect(self.sync)
         state.design_ready.connect(self._show_design)
         self.sync(i)
@@ -214,6 +223,7 @@ class DesignPanel(QWidget):
         self.wedge.set_value(i.cowl_wedge_deg)
         self.max_cowl.setEnabled(i.max_cowl_enabled and i.method != "custom")
         self.diffuser.set_value(i.diffuser_recovery)
+        self.cowl_height.set_value(i.cowl_frontal_height)
         for field in (self.capture, self.width_field):
             field.set_decimals(_DECIMALS_LENGTH[system])
             field.set_unit(_units.unit_label("length", system))

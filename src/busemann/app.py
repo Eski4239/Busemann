@@ -271,7 +271,7 @@ class MainWindow(QMainWindow):
         for action in (self.zoom_in_action, self.zoom_out_action, self.fit_action):
             bar.addAction(action)
 
-        bar.addSeparator()
+        self.zoom_separator = bar.addSeparator()    # hidden with zoom/fit off the canvases
         self.layer_actions = {}
         for name, label, on in (("shocks", "Shocks", True), ("regions", "Regions", True),
                                 ("dimensions", "Dimensions", False), ("grid", "Grid", False)):
@@ -323,7 +323,11 @@ class MainWindow(QMainWindow):
 
     def _on_tab(self, _index):
         # the layer toggles belong to the canvases (Design, Off-design), not Analytics/Compare
-        self.view_row.setVisible(self.tabs.currentWidget() in (self.canvas, self.offdesign_tab))
+        on_canvas = self.tabs.currentWidget() in (self.canvas, self.offdesign_tab)
+        self.view_row.setVisible(on_canvas)
+        for action in (self.zoom_in_action, self.zoom_out_action, self.fit_action):
+            action.setVisible(on_canvas)        # zoom and fit act on a canvas only
+        self.zoom_separator.setVisible(on_canvas)
         view = "offdesign" if self.tabs.currentWidget() is self.offdesign_tab else "design"
         self.state.set_active_view(view)
         canvas = self.current_canvas()

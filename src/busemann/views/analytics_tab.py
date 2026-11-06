@@ -20,7 +20,13 @@ from ..theme import tokens
 from ..tooltips import tip
 from ..widgets import SegmentedControl
 
-VIEWS = (("turning", "Recovery vs turning"), ("mach", "Recovery vs design Mach"))
+VIEWS = (("turning", "Recovery vs turning"), ("mach", "Recovery vs design Mach"),
+         ("drag", "Drag (inviscid estimate)"))
+PAGES = {"turning": 0, "mach": 1, "drag": 2}
+DRAG_CAPTION = ("Inviscid estimate: pressure drag only, no skin friction. Coefficients per "
+                "unit width on q∞ × capture height; cowl frontal height {h:.2f} × capture "
+                "height (Design ▸ Advanced).")
+COWL_GAP_TEXT = "cowl shock detached: not computable"
 THETA_LINE_TEXT = "cowl shock detaches beyond here"
 MIL_CAPTION = ("MIL-E-5008B (dashed orange): compare with the engine-face estimate, "
                "recovery × diffuser {d:.3f}, not with these inviscid curves.")
@@ -65,6 +71,17 @@ class _AnalyticsJob(QRunnable):
                                api.design(M, n, gamma=gamma).cowl_angle_deg)
                            for n in api.TRADE_N_TURNING})
             emit(g, "optima", None, optima)
+            equal, match = {}, {}
+            for base in api.TRADE_N_TURNING:
+                d_b = optima[base][1]
+                equal[base] = {
+                    "rec": {m: api.design(M, m, gamma=gamma, max_cowl_angle=d_b).recovery_total
+                            for m in api.TRADE_N_TURNING if m > base},
+                    "iso": api.isentropic_vs_turning(M, gamma, delta_grid=(d_b,)).recovery[0]}
+                match[base] = {m: api.turning_for_recovery(M, m, optima[base][0], gamma)
+                               for m in api.TRADE_N_TURNING if m > base}
+            emit(g, "equal_turn", None, equal)
+            emit(g, "match", None, match)
             for n in api.TRADE_N_MACH:
                 trade = api.trade_vs_design_mach(gamma=gamma, n_list=(n,))
                 emit(g, "mach", n, trade.curves[0])
@@ -132,9 +149,33 @@ class AnalyticsTab(QWidget):
         vm.addWidget(self.cowl_chart, 2)
         vm.addWidget(self.cowl_takeaway)
 
+        self.drag_chart = TradeChart("Drag vs M∞ (inviscid estimate)", "analytics.drag_mach",
+                                     "M∞", "C<sub>D</sub>",
+                                     min_height=170, end_labels=False)
+        self.drag_takeaway = self._takeaway("analytics.takeaway")
+        self.rc_chart = TradeChart("Recovery vs cowl drag at the design Mach",
+                                   "analytics.drag_recovery",
+                                   "C<sub>D,cowl</sub> (inviscid estimate)", "Recovery p0/p0∞",
+                                   min_height=170)
+        self.rc_takeaway = self._takeaway("analytics.takeaway")
+        self.drag_caption = QLabel("")
+        self.drag_caption.setObjectName("chartLegend")
+        self.drag_caption.setWordWrap(True)
+        self.drag_caption.setToolTip(tip("analytics.drag"))
+        page_d = QWidget()
+        vd = QVBoxLayout(page_d)
+        vd.setContentsMargins(0, 0, 0, 0)
+        vd.addWidget(self.drag_chart, 1)
+        vd.addWidget(self.drag_takeaway)
+        vd.addWidget(self.rc_chart, 1)
+        vd.addWidget(self.rc_takeaway)
+        vd.addWidget(self.drag_caption)
+        self._rc_index = {}       # n -> turning-curve indices drawn on the recovery-drag chart
+
         self.pages = QStackedWidget()
         self.pages.addWidget(page_t)
         self.pages.addWidget(page_m)
+        self.pages.addWidget(page_d)
 
         self.selection_label = QLabel(NO_SELECTION)
         self.selection_label.setObjectName("muted")
@@ -156,10 +197,21 @@ class AnalyticsTab(QWidget):
         layout.addWidget(self.pages, 1)
         layout.addLayout(bottom)
 
-        for chart in (self.turning_chart, self.mach_chart, self.cowl_chart):
+        for chart in self._charts():
             chart.picked.connect(lambda key, i, c=chart: self._on_pick(c, key, i))
         state.design_ready.connect(lambda *_: self._on_design())
         state.inputs_changed.connect(lambda *_: self._update_captions())
+        state.inputs_changed.connect(lambda *_: self._on_inputs())
+
+    def _charts(self):
+        return (self.turning_chart, self.mach_chart, self.cowl_chart, self.drag_chart,
+                self.rc_chart)
+
+    def _on_inputs(self):
+        """The cowl frontal height changes only the drag page (no recompute)."""
+        h = self.state.inputs.cowl_frontal_height
+        if h != getattr(self, "_drawn_frontal", None) and self.current_view() == "drag":
+            self.update_drag()
 
     @staticmethod
     def _takeaway(tip_key):
@@ -172,8 +224,10 @@ class AnalyticsTab(QWidget):
     # --- view -------------------------------------------------------------------------------
     def set_view(self, key):
         self.view.set_current(key)
-        self.pages.setCurrentIndex(0 if key == "turning" else 1)
+        self.pages.setCurrentIndex(PAGES[key])
         self._clear_selection()
+        if key == "drag":
+            self.update_drag()
 
     def current_view(self):
         return self.view.current()
@@ -200,6 +254,8 @@ class AnalyticsTab(QWidget):
         else:
             self._update_markers()
             self._update_takeaways()
+            if self.current_view() == "drag":
+                self.update_drag()
 
     def refresh(self):
         """Recompute (or replay from the cache) the curves of the current design's (M, γ)."""
@@ -212,7 +268,7 @@ class AnalyticsTab(QWidget):
         self.data = {}
         self.partials_seen = []
         self._clear_selection()
-        for chart in (self.turning_chart, self.mach_chart, self.cowl_chart):
+        for chart in self._charts():
             chart.clear()
         if key in self._cache:
             for kind, k, payload in self._cache[key]:
@@ -245,6 +301,8 @@ class AnalyticsTab(QWidget):
         self.status.setText(self.data.get("error", ""))
         self._update_markers()
         self._update_takeaways()
+        if self.current_view() == "drag":
+            self.update_drag()
         self.computed.emit()
 
     def is_computing(self):
@@ -341,7 +399,9 @@ class AnalyticsTab(QWidget):
                 label.setText("")
             return
         M, n = self._key[0], d.inputs.n_ramps
-        self.turning_takeaway.setText(T.turning(M, optima, theta, n))
+        equal = self.data.get("equal_turn")
+        self.turning_takeaway.setText(
+            T.turning(M, optima, theta, n, equal[T.turning_base(n)]) if equal else "")
         self.mach_takeaway.setText(T.design_mach(M, optima, n))
         self.cowl_takeaway.setText(T.cowl(M, optima, theta, n))
         self._update_captions()
@@ -354,18 +414,21 @@ class AnalyticsTab(QWidget):
     # --- selection and apply ----------------------------------------------------------------
     def _clear_selection(self):
         self.selection = None
-        for chart in (self.turning_chart, self.mach_chart, self.cowl_chart):
+        for chart in self._charts():
             chart.set_selected(None)
         self.selection_label.setText(NO_SELECTION)
         self.apply_button.setEnabled(False)
 
     def _on_pick(self, chart, key, index):
-        for other in (self.turning_chart, self.mach_chart, self.cowl_chart):
+        for other in self._charts():
             if other is not chart:
                 other.set_selected(None)
         if key is None or not isinstance(key, int):
             self._clear_selection()
             return
+        if chart is self.rc_chart:                 # same design as the turning-curve point
+            index = self._rc_index[key][index]
+            chart = self.turning_chart
         if chart is self.turning_chart:
             c = self.data[("turn", key)]
             constrained = c.constrained[index]
@@ -396,3 +459,142 @@ class AnalyticsTab(QWidget):
         self.selection_label.setText(f"Applied: {self.selection['text']}.")
         self.apply_button.setEnabled(False)
         self.selection = None
+
+    # --- drag page (M9b) --------------------------------------------------------------------
+    def update_drag(self):
+        """Drag vs M∞ from the design's off-design sweep, and recovery vs cowl drag along the
+        turning curves at the design Mach. Closed form, on the GUI thread (a few ms)."""
+        d, sweep = self.state.design, self.state.sweep
+        dh = self.state.inputs.cowl_frontal_height
+        self._drawn_frontal = dh
+        self.drag_caption.setText(DRAG_CAPTION.format(h=dh))
+        if d is None:
+            return
+        M, gamma, wedge = d.inputs.M, d.inputs.gamma, d.inputs.cowl_wedge_deg
+        at_design = api.cowl_pressure_drag(M, M, 1.0, d.cowl_angle_deg + wedge, dh, gamma)
+        self._draw_drag_vs_mach(d, sweep, dh, at_design)
+        self._draw_recovery_vs_cowl(d, dh, at_design)
+
+    def _draw_drag_vs_mach(self, d, sweep, dh, at_design):
+        chart = self.drag_chart
+        for key in ("add", "cowl", "total"):
+            if key in chart.series:
+                chart.plot.getPlotItem().removeItem(chart.series.pop(key)["item"])
+        chart.set_bands([])
+        if sweep is None or not d.inputs.n_ramps:
+            chart.set_marker(None, None, "")
+            self.drag_takeaway.setText("No off-design sweep for this design (no ramps), so "
+                                       "no drag estimate." if not d.inputs.n_ramps else "")
+            return
+        ds = api.drag_sweep(d, sweep, dh)
+        machs = ds.machs
+        total = [None if a is None or c is None else a + c
+                 for a, c in zip(ds.cd_add, ds.cd_cowl)]
+
+        def text(i):
+            lines = [f"M∞ {machs[i]:.3f}"]
+            lines.append(f"{T.CD_ADD} " + ("—" if ds.cd_add[i] is None
+                                           else f"{ds.cd_add[i]:.4f}"))
+            lines.append(f"{T.CD_COWL} " + (f"{ds.cd_cowl[i]:.4f}" if ds.cd_cowl[i] is not None
+                                            else f"— ({ds.reasons[i]})"))
+            if total[i] is not None:
+                lines.append(f"Sum {total[i]:.4f}")
+            lines.append(api.DRAG_LABEL)
+            return "<br>".join(lines)
+
+        chart.set_series("add", machs, ds.cd_add, text, label=f"additive {T.CD_ADD}",
+                         pickable=False)
+        chart.set_series("cowl", machs, ds.cd_cowl, text, label=f"cowl {T.CD_COWL}",
+                         pickable=False)
+        chart.set_series("total", machs, total, text, label="sum", pickable=False)
+        chart.set_vline(d.inputs.M, "design Mach", token="text_muted")
+        chart.set_bands(_gaps(machs, ds.cd_cowl, ds.reasons))
+        chart.plot.getPlotItem().enableAutoRange()
+        chart.place_band_text()
+        cd = at_design.cd
+        chart.set_marker(d.inputs.M, cd, f"This design at M {d.inputs.M:.2f}<br>"
+                         f"{T.CD_COWL} " + ("—" if cd is None else f"{cd:.4f}"))
+        self.drag_takeaway.setText(T.drag_vs_mach(d.inputs.M, machs, ds.cd_add, cd))
+
+    def _draw_recovery_vs_cowl(self, d, dh, at_design):
+        chart = self.rc_chart
+        if self._key is None or ("turn", 1) not in self.data:
+            return
+        M, gamma, wedge = self._key[0], self._key[1], d.inputs.cowl_wedge_deg
+        for key in list(chart.series):
+            chart.plot.getPlotItem().removeItem(chart.series[key]["item"])
+            if chart.series[key]["label"] is not None:
+                chart.plot.getPlotItem().removeItem(chart.series[key]["label"])
+        chart.series = {}
+        chart.set_selected(None)
+        self._rc_index = {}
+        for n in api.TRADE_N_TURNING:
+            c = self.data.get(("turn", n))
+            if c is None:
+                continue
+            cds = api.cowl_drag_vs_turning(M, c.delta_deg, gamma, wedge, dh)
+            keep = [i for i, v in enumerate(cds) if v is not None]
+            self._rc_index[n] = keep
+            chart.set_series(
+                n, [cds[i] for i in keep], [c.recovery_total[i] for i in keep],
+                label=_ramps(n),
+                text=lambda j, c=c, keep=keep, cds=cds: self._rc_text(c, keep[j], cds))
+        iso = self.data.get("iso")
+        if iso is not None:
+            cds = api.cowl_drag_vs_turning(M, iso.delta_deg, gamma, wedge, dh)
+            keep = [i for i, v in enumerate(cds) if v is not None]
+            chart.set_series(
+                "isentropic", [cds[i] for i in keep], [iso.recovery[i] for i in keep],
+                pickable=False, label="isentropic",
+                text=lambda j, keep=keep, cds=cds: (
+                    f"Isentropic limit at M {M:.2f}<br>Turning {iso.delta_deg[keep[j]]:.2f}°"
+                    f"<br>Recovery {iso.recovery[keep[j]]:.4f}<br>{T.CD_COWL} "
+                    f"{cds[keep[j]]:.4f}<br>{ISENTROPIC_NOTE}"))
+        same = self._design_key() == self._key
+        cd = at_design.cd
+        chart.set_marker(cd if same else None, d.recovery_total,
+                         f"This design: {_ramps(d.inputs.n_ramps)} at M {d.inputs.M:.2f}<br>"
+                         f"Recovery {d.recovery_total:.4f}, {T.CD_COWL} "
+                         + ("—" if cd is None else f"{cd:.4f}"))
+        optima, match = self.data.get("optima"), self.data.get("match")
+        if optima is None or match is None:
+            return
+        base = T.turning_base(d.inputs.n_ramps)
+        cd_base = api.cowl_drag_vs_turning(M, (optima[base][1],), gamma, wedge, dh)[0]
+        matches = {m: None if delta is None else
+                   api.cowl_drag_vs_turning(M, (delta,), gamma, wedge, dh)[0]
+                   for m, delta in match[base].items()}
+        self.rc_takeaway.setText(T.recovery_vs_cowl(M, d.inputs.n_ramps, optima[base][0],
+                                                    cd_base, matches))
+
+    def _rc_text(self, c, i, cds):
+        return "<br>".join([
+            f"{_ramps(c.n)} at M {self._key[0]:.2f}",
+            f"Turning (cowl angle) {c.delta_deg[i]:.2f}°",
+            f"Recovery {c.recovery_total[i]:.4f}",
+            f"{T.CD_COWL} {cds[i]:.4f} (inviscid estimate)",
+            f"Ramp angles: {_angles(c.ramps_deg[i])}"])
+
+
+def gap_label(reason):
+    """'cowl shock detached: not computable in this model' -> '…: not computable'."""
+    return (reason or COWL_GAP_TEXT).replace(" in this model", "")
+
+
+def _gaps(xs, values, reasons):
+    """Contiguous x ranges where values is None (one per reason), widened to the midpoints
+    of the neighbouring samples: [(lo, hi, label), ...]."""
+    out, start = [], None
+    for k in range(len(values) + 1):
+        missing = k < len(values) and values[k] is None
+        same = missing and start is not None and reasons[k] == reasons[start]
+        if start is not None and not same:
+            end = k - 1
+            lo = xs[start] if start == 0 else 0.5 * (xs[start - 1] + xs[start])
+            hi = xs[end] if end == len(xs) - 1 else 0.5 * (xs[end] + xs[end + 1])
+            out.append((lo, hi, gap_label(reasons[start])))
+            start = None
+        if missing and start is None:
+            start = k
+    return out
+

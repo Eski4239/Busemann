@@ -53,6 +53,7 @@ _FIELDS = {
     "inlet_width_m": ("Inlet width", lambda v, s: "—" if v is None else
                       _display("length", "{:.3f}")(v, s)),
     "diffuser_recovery": ("Diffuser recovery", _num("{:.3f}")),
+    "cowl_frontal_height": ("Cowl frontal height", _num("{:.2f} × capture height")),
 }
 
 

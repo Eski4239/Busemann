@@ -52,6 +52,8 @@ class OffDesignCard(QFrame):
             ("M_duct", "Duct M", "offcard.M_duct"),
             ("margin", "Margin", "offcard.margin"),
             ("regime", "Regime", "offcard.regime"),
+            ("cd_add", "C<sub>D,add</sub>", "offcard.cd_add"),
+            ("cd_cowl", "C<sub>D,cowl</sub>", "offcard.cd_cowl"),
             ("supplied", "ṁ supply", "offcard.supplied"),
             ("demanded", "ṁ demand", "offcard.demanded"))
 
@@ -124,7 +126,7 @@ class OffDesignCard(QFrame):
         self.chip.style().unpolish(self.chip)
         self.chip.style().polish(self.chip)
 
-    def show_point(self, design, off, regime):
+    def show_point(self, design, off, regime, frontal_height=0.10):
         def put(key, text, delta=""):
             self.values[key].setText(text)
             self.deltas[key].setText(delta)
@@ -148,6 +150,35 @@ class OffDesignCard(QFrame):
                 f"{off.cowl_margin_deg - design.cowl_margin_deg:+.2f}")
             self.values["margin"].setToolTip(tip("offcard.margin"))
         put("regime", REGIMES[regime][0])
+        self._show_drag(design, off, frontal_height)
+
+    def _show_drag(self, design, off, frontal_height):
+        """Inviscid pressure-drag coefficients at the slider Mach (M9b), Δ vs the design."""
+        from inletdesign import api
+
+        if not design.inputs.n_ramps:
+            for key in ("cd_add", "cd_cowl"):
+                self.values[key].setText(EMPTY)
+                self.deltas[key].setText("")
+            return
+        add = api.additive_drag(design, off)
+        self.values["cd_add"].setText(f"{add:.4f}")
+        self.deltas["cd_add"].setText(f"{add:+.4f}")          # 0 at the design point
+        cowl = api.cowl_drag(off, frontal_height, design.inputs.gamma)
+        at_design = api.cowl_pressure_drag(
+            design.inputs.M, design.inputs.M, 1.0,
+            design.cowl_angle_deg + design.inputs.cowl_wedge_deg, frontal_height,
+            design.inputs.gamma).cd
+        base = tip("offcard.cd_cowl")
+        if cowl.cd is None:
+            self.values["cd_cowl"].setText(EMPTY)
+            self.deltas["cd_cowl"].setText("")
+            self.values["cd_cowl"].setToolTip(f"{cowl.reason[:1].upper()}{cowl.reason[1:]}.")
+        else:
+            self.values["cd_cowl"].setText(f"{cowl.cd:.4f}")
+            self.deltas["cd_cowl"].setText("" if at_design is None else
+                                           f"{cowl.cd - at_design:+.4f}")
+            self.values["cd_cowl"].setToolTip(base)
 
     def text(self, key):
         return self.values[key].text()
@@ -249,6 +280,7 @@ class OffDesignTab(QWidget):
         state.design_ready.connect(lambda *_: self._on_design())
         state.off_design_ready.connect(lambda *_: self._on_off_design())
         state.inputs_changed.connect(lambda *_: self._sync_slider())
+        state.inputs_changed.connect(lambda *_: self._on_frontal_height())
         if state.design is not None:
             self._on_design()
             self._on_off_design()
@@ -317,11 +349,19 @@ class OffDesignTab(QWidget):
         self.badge.setProperty("regime", regime or "")
         self.badge.style().unpolish(self.badge)
         self.badge.style().polish(self.badge)
-        self.card.show_point(self.state.design, off, regime)
+        self.card.show_point(self.state.design, off, regime,
+                             self.state.inputs.cowl_frontal_height)
         self.card.show_flows(self.state.total_mass_flow(at_off_design=True),
                              self.state.demanded_mass_flow(), self.state.inputs.units)
         if not self.slider.is_dragging():
             self.charts.set_cursor(self.state.off_design_mach())
+
+    def _on_frontal_height(self):
+        """The cowl frontal height changes only the drag rows (no recompute)."""
+        h = self.state.inputs.cowl_frontal_height
+        if h != getattr(self, "_shown_frontal", h) and self.state.off_design is not None:
+            self._on_off_design()
+        self._shown_frontal = h
 
     def _sync_slider(self):
         """Follow programmatic changes of the off-design Mach (not while dragging)."""

@@ -894,3 +894,232 @@ def trade_vs_design_mach(M_grid=TRADE_MACH_GRID, gamma=1.4, n_list=TRADE_N_MACH)
     gamma = round(float(gamma), 10)
     return MachTrade(curves=tuple(_mach_curve(grid, gamma, n) for n in n_list), M=grid,
                      theta_max_deg=_theta_max_curve(grid, gamma))
+
+
+# --- drag (M9b, addendum D.2): inviscid pressure drag per unit width ------------------------
+# Coefficients on the freestream dynamic pressure and the capture height:
+#   C_D = D' / (q_inf h_c),  q_inf = gamma/2 p_inf M_inf^2  (D' per unit width).
+# SOURCE (additive drag definition, PENDING user confirmation): M. Sibulkin, "Theoretical
+# and Experimental Investigation of Additive Drag", NACA Report 1187 (1954; supersedes NACA
+# RM E51B13, 1951): the additive drag is the x-component of the pressure force (p - p_inf)
+# on the entering streamtube between the free stream and the inlet lip.
+# Cowl pressure drag: Busemann model choice (the oblique-shock pressure, NACA 1135 eq. 128,
+# acting on the cowl's frontal height); no published criterion cited.
+
+COWL_FRONTAL_RANGE = (0.01, 1.0)       # cowl frontal height / h_c
+COWL_DETACHED_REASON = "cowl shock detached: not computable in this model"
+COWL_SUBSONIC_REASON = "subsonic flow at the lip: not computable in this model"
+DRAG_LABEL = "inviscid estimate: pressure drag only, no skin friction"
+
+
+@dataclass(frozen=True)
+class CowlDrag(_Serialisable):
+    cd: float                # C_D,cowl, or None when not computable
+    reason: str              # why cd is None, else None
+    p_ratio: float           # p_c / p_inf on the cowl's outer face (None if not computable)
+    turn_deg: float          # turn the outer cowl face imposes (incl. the lip wedge)
+    lip_mach: float
+
+
+@dataclass(frozen=True)
+class DragSweep(_Serialisable):
+    machs: tuple
+    cd_add: tuple            # None where the ramp shocks are detached
+    cd_cowl: tuple           # None where not computable (see reasons)
+    reasons: tuple           # None, or why the cowl drag (or both) is missing
+
+
+def _q_h(M, h):
+    return 0.5 * M * M * h            # q_inf h_c / (gamma p_inf), times gamma below
+
+
+def _ramp_regions(off):
+    """Region states freestream first, one per ramp (the terminal 'duct' region dropped)."""
+    return off.regions[: len(off.ramp_angles_deg) + 1]
+
+
+def _check_off(design_result, off):
+    if off is None or not off.ramp_angles_deg:
+        raise ValueError("drag needs an off-design result of a design with ramps")
+    _ = design_result.geometry
+
+
+def additive_drag(design_result, off):
+    """C_D,add = sum_k (p_k/p_inf - 1) dy_k / (gamma/2 M_inf^2 h_c) along the dividing
+    streamline (the streamline ending at the cowl lip), freestream to lip. Its segments lie
+    in the regions behind the shocks it crosses; the one ending at the lip is in the lip's
+    region. Exactly 0 when the streamline is only the lip (at and above the design Mach)."""
+    _check_off(design_result, off)
+    gamma = design_result.inputs.gamma
+    h = design_result.inputs.capture_height
+    regions = _ramp_regions(off)
+    pts = off.capture_streamline
+    segs = len(pts) - 1
+    if segs <= 0:
+        return 0.0
+    total = 0.0
+    for j in range(segs):
+        k = off.cowl_lip_region - (segs - 1 - j)
+        total += (regions[k].p_ratio - 1.0) * (pts[j + 1][1] - pts[j][1])
+    return float(total / (gamma * _q_h(off.M_inf, h)))
+
+
+def _ramp_y(points, x):
+    for (x0, y0), (x1, y1) in zip(points, points[1:]):
+        if x0 <= x <= x1 and x1 > x0:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    (x0, y0), (x1, y1) = points[-2], points[-1]          # past the last point: extend it
+    return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+
+
+def additive_drag_momentum(design_result, off):
+    """Independent check of additive_drag: x-momentum balance on the captured streamtube
+    (upstream face of height A0 = mass capture x h_c in freestream; dividing streamline on
+    top; the ramp below, segment i at region i+1's pressure; the vertical entry face
+    x = x_lip from the ramp to the lip, split at the ramp-shock crossings), in p_inf units:
+      D_add = int_entry (gamma p M^2 cos^2(phi) + p - p_inf) dy + int_ramp (p - p_inf) dy
+              - gamma p_inf M_inf^2 A0.
+    Valid below and at the design Mach (spillage / on-lip); above it, shocks inside the duct
+    can intersect before the entry face (merged-shock regime, not modelled)."""
+    _check_off(design_result, off)
+    gamma = design_result.inputs.gamma
+    h = design_result.inputs.capture_height
+    regions = _ramp_regions(off)
+    n = len(off.ramp_angles_deg)
+    pts = [tuple(p) for p in design_result.geometry.ramp_points]
+    lip = design_result.geometry.lip
+    phis = design_result.flow_angles_deg
+    xl = lip[0]
+    ramp = 0.0
+    for i in range(len(pts) - 1):
+        (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+        if x0 >= xl:
+            break
+        xe = min(x1, xl)
+        ye = y0 + (y1 - y0) * (xe - x0) / (x1 - x0) if x1 > x0 else y1
+        ramp += (regions[min(i + 1, n)].p_ratio - 1.0) * (ye - y0)
+    if pts[-1][0] < xl:                                   # ramp ends before the lip plane
+        y_end = _ramp_y(pts, xl)
+        ramp += (regions[n].p_ratio - 1.0) * (y_end - pts[-1][1])
+    y_ramp = _ramp_y(pts, xl)
+    shocks = []
+    for i in range(n):
+        a = math.radians(phis[i] + off.betas_deg[i])
+        shocks.append((pts[i], a))
+    cuts = [y_ramp, lip[1]]
+    for (ox, oy), a in shocks:
+        y = oy + (xl - ox) * math.tan(a)
+        if y_ramp < y < lip[1]:
+            cuts.append(y)
+    cuts.sort()
+
+    def region_of(y):
+        k = 0
+        for i, ((ox, oy), a) in enumerate(shocks):
+            below = math.cos(a) * (y - oy) - math.sin(a) * (xl - ox) < 0.0
+            if xl > ox and below:
+                k = i + 1
+        return k
+
+    entry = 0.0
+    for y0, y1 in zip(cuts, cuts[1:]):
+        r = regions[region_of(0.5 * (y0 + y1))]
+        c = math.cos(math.radians(r.theta_deg))
+        entry += (gamma * r.p_ratio * r.M ** 2 * c * c + r.p_ratio - 1.0) * (y1 - y0)
+    inflow = gamma * off.M_inf ** 2 * off.mass_capture_ratio * h
+    return float((entry + ramp - inflow) / (gamma * _q_h(off.M_inf, h)))
+
+
+def _check_frontal(frontal_height):
+    lo, hi = COWL_FRONTAL_RANGE
+    if not isinstance(frontal_height, (int, float)) or not math.isfinite(frontal_height) \
+            or not lo <= frontal_height <= hi:
+        raise ValueError(f"cowl frontal height must be {lo:g}-{hi:g} of the capture height "
+                         f"(got {frontal_height!r})")
+
+
+def cowl_pressure_drag(M_inf, lip_mach, lip_p_ratio, turn_deg, frontal_height=0.10,
+                       gamma=1.4):
+    """C_D,cowl for a lip in flow of Mach lip_mach at p_lip/p_inf = lip_p_ratio, its outer
+    face turning that flow by turn_deg (cowl turn + lip wedge): p_c = p_lip * p2/p1(lip M,
+    turn) from the oblique-shock relations, C_D,cowl = (p_c/p_inf - 1) dh / (gamma/2 M^2)
+    with dh = frontal_height (fraction of h_c). None (with a reason) if the lip flow is
+    subsonic or the cowl shock is detached."""
+    _check_mach(M_inf)
+    _check_gamma(gamma)
+    _check_frontal(frontal_height)
+    if not math.isfinite(turn_deg) or turn_deg < 0.0:
+        raise ValueError(f"cowl turn must be ≥ 0° (got {turn_deg!r})")
+    if lip_mach < 1.0:
+        return CowlDrag(None, COWL_SUBSONIC_REASON, None, float(turn_deg), float(lip_mach))
+    if turn_deg == 0.0:
+        p_c = float(lip_p_ratio)
+    else:
+        if turn_deg >= float(_obl.max_deflection(lip_mach, gamma)[0]):
+            return CowlDrag(None, COWL_DETACHED_REASON, None, float(turn_deg), float(lip_mach))
+        p_c = float(lip_p_ratio) * float(
+            _obl.oblique_shock_state(lip_mach, turn_deg, gamma, weak=True)["p2_p1"])
+    cd = (p_c - 1.0) * frontal_height / (0.5 * gamma * M_inf * M_inf)
+    return CowlDrag(float(cd), None, p_c, float(turn_deg), float(lip_mach))
+
+
+def cowl_drag(off, frontal_height=0.10, gamma=1.4):
+    """C_D,cowl of an off-design (or design-Mach) point: the lip's local flow
+    (off.lip_mach, region off.cowl_lip_region) turned by off.cowl_required_turn_deg."""
+    lip_p = off.regions[off.cowl_lip_region].p_ratio
+    return cowl_pressure_drag(off.M_inf, off.lip_mach, lip_p, off.cowl_required_turn_deg,
+                              frontal_height, gamma)
+
+
+def drag_sweep(design_result, sweep, frontal_height=0.10):
+    """C_D,add and C_D,cowl at every point of an off-design sweep (None where detached)."""
+    _check_frontal(frontal_height)
+    gamma = design_result.inputs.gamma
+    add, cowl, reasons = [], [], []
+    for point in sweep.points:
+        if point is None:
+            add.append(None)
+            cowl.append(None)
+            reasons.append("ramp shock detached")
+            continue
+        add.append(additive_drag(design_result, point))
+        c = cowl_drag(point, frontal_height, gamma)
+        cowl.append(c.cd)
+        reasons.append(c.reason)
+    return DragSweep(machs=tuple(sweep.machs), cd_add=tuple(add), cd_cowl=tuple(cowl),
+                     reasons=tuple(reasons))
+
+
+def cowl_drag_vs_turning(M, deltas, gamma=1.4, wedge=0.0, frontal_height=0.10):
+    """Design-point C_D,cowl for each total turning delta (deg): the lip sees freestream and
+    its outer face turns it by delta + wedge. None past theta_max(M)."""
+    return tuple(cowl_pressure_drag(M, M, 1.0, float(d) + wedge, frontal_height, gamma).cd
+                 for d in deltas)
+
+
+def turning_for_recovery(M, n, target, gamma=1.4):
+    """Total turning (deg) at which the n-ramp cowl-constrained Oswatitsch optimum reaches
+    total recovery `target` (brentq on delta). None if target is above n's unconstrained
+    optimum or below its smallest-turning value."""
+    from scipy.optimize import brentq
+
+    from . import optimize as _opt
+
+    _check_mach(M)
+    _check_gamma(gamma)
+    if n not in TRADE_N_TURNING:
+        raise ValueError(f"ramp count must be 1-4 (got {n!r})")
+    opt = _unconstrained(round(float(M), 10), n, round(float(gamma), 10))
+    cowl = float(sum(opt["ramps"]))
+    if target > opt["states"][-1].p0_ratio:
+        return None
+
+    def rec(d):
+        return _opt.constrained_optimum(M, n, gamma, d, opt)["states"][-1].p0_ratio - target
+
+    lo = 1e-3
+    if rec(lo) > 0.0:
+        return None
+    if rec(cowl) == 0.0:
+        return cowl
+    return float(brentq(rec, lo, cowl, xtol=1e-12))
