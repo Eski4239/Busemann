@@ -90,7 +90,7 @@ def main():
     # M9a: the Analytics tab, both views, once its curves are drawn
     window.tabs.setCurrentWidget(window.analytics_tab)
     settle(1500)
-    for view in ("turning", "mach", "drag"):
+    for view in ("turning", "mach", "drag", "char"):
         window.analytics_tab.set_view(view)
         settle(300)
         problems += [dict(p, tab=f"Analytics {view}")

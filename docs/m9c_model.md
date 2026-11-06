@@ -1,6 +1,7 @@
 # M9c model note: inlet characteristic (recovery vs mass-flow ratio) and buzz
 
-Status: **model proposal only — nothing here is implemented.** For a fixed design evaluated at
+Status: **implemented in M9c** (`src/inletdesign/characteristic.py`, Analytics ▸ Inlet
+characteristic; tests `tests/test_characteristic.py`). For a fixed design evaluated at
 one freestream Mach M∞ (the design point or an off-design point of the existing model).
 Revised after the source review: the references below were read in `references/`, and the
 statements marked CONFIRMED were checked by the user's reviewer.
@@ -29,7 +30,8 @@ statements marked CONFIRMED were checked by the user's reviewer.
 | 4b. Buzz onset, Dailey (alternative, not recommended) | **Empirical** (needs the slope of a real characteristic) | measured slope |
 
 Notation: region k is the flow behind ramp shock k (k = 0 freestream, k = n behind the last
-ramp shock); M_n = M_pre_terminal, φ_n its flow direction; η_obl = recovery behind the ramp
+ramp shock); M_n = M_pre_terminal, θ_n its flow direction (the cumulative flow angle shown
+in the app's region table); η_obl = recovery behind the ramp
 shocks; MFR = A0/Ac (mass-flow ratio, = mass capture of the existing model); A_e = h_t, the
 duct entry (throat) height; per unit width throughout.
 
@@ -99,7 +101,7 @@ lip and the subsonic flow behind it spills around the lip, so MFR drops.
 ### 3a. Recovery and mass-flow ratio (exact quasi-1D)
 
 - **Which region the shock stands in.** First in region n, between the last ramp shock and the
-  lip, normal to φ_n near the dividing streamline. The entering flow therefore crosses a normal
+  lip, normal to θ_n near the dividing streamline. The entering flow therefore crosses a normal
   shock at M_n: η = η_obl · (p0y/p0x)(M_n) = η_crit (the ideal, flat branch).
 - **Mass-flow ratio vs back-pressure.** The duct is no longer choked; the throttle sets the
   exit Mach: (p/p_t)(M_x) = p_x / (η_crit · p0∞), and
@@ -118,21 +120,25 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
   2. the sonic line between the shock and the body is **straight and inclined at an angle
      that depends only on the free-stream Mach number** (not a line drawn from the lip to an
      arbitrary point of the shock).
-- **Equations (plane flow).** Notation here: M₀ the upstream Mach number, β = √(M₀² − 1),
-  x measured from the intersection of the asymptotes, ε the local shock inclination, S the
-  shock sonic point, SB the body sonic point. The scanned report's Greek symbols are not
-  legible in its OCR text, so ε, η, λ_d and λ_S are this note's names for the quantities
-  Moeckel defines (symbol list, pp. 3–4); check them against the report.
+- **Equations (plane flow), in the report's symbols (symbol list, pp. 3–4; CONFIRMED):**
+  M₀ the free-stream Mach number, β = √(M₀² − 1), x the coordinate in the stream direction
+  (measured from the intersection of the asymptotes), y normal to it, φ the local inclination
+  of the detached shock relative to the x-axis, η the angle between the sonic line and the
+  normal to the free-stream direction, λ the angle of a streamline relative to the x-axis
+  (λ_d: wedge half-angle for detachment; λ_S: at the shock sonic point), S the shock sonic
+  point, SB the body sonic point, τ the fraction of the maximum possible inlet mass flow that
+  passes outside the cowl.
   - Shock form, eq. (4), p. 7: β y = √(x² − x₀²) (x₀: vertex to asymptote intersection).
-    Shock slope, eq. (5), p. 7: tan ε = x / (β √(x² − x₀²)) = √(x₀² + β² y²) / (β² y).
-  - Shock sonic point, eqs. (6)/(6a), p. 8: ε_S is the shock angle at which the flow behind
+    Shock slope, eq. (5), p. 7: tan φ = x / (β √(x² − x₀²)) = √(x₀² + β² y²) / (β² y).
+  - Shock sonic point, eqs. (6)/(6a), p. 8: φ_S is the shock angle at which the flow behind
     the shock is sonic (oblique-shock theory at M₀); from eq. (5),
-    y_S = x₀ / (β √(β² tan² ε_S − 1)).
+    y_S = x₀ / (β √(β² tan² φ_S − 1)).
   - Sonic-line inclination (angle between the sonic line and the normal to the upstream flow),
-    eq. (17), p. 11: η = ½ (λ_d + λ_S), the mean of the flow inclinations at the two ends,
-    with λ_d the wedge half-angle for detachment and λ_S the flow deflection behind the shock at
-    S. Both depend only on M₀. Because the two differ only slightly, Moeckel then takes, for
-    plane flow, **η = λ_S** (p. 11), and uses it in the inlet relations (eq. 34).
+    eq. (17), p. 11 (CONFIRMED): η = ½ (λ_d + λ_S), the mean of the flow inclinations at the
+    two ends, with λ_d the wedge half-angle for detachment and λ_S the flow inclination behind
+    the shock at S. Both depend only on M₀. Because the two differ only slightly, Moeckel then
+    takes, for plane flow, **η = λ_S** (p. 11, CONFIRMED), and uses it in the inlet relations
+    (eq. 34).
   - Continuity on the sonic line, eq. (14), p. 10: the mass flow crossing the sonic line at
     sonic speed equals the free-stream mass flow of the stream tube it carries, with the total
     pressure taken on the mass-centroid streamline (plane flow: entering the shock at
@@ -141,10 +147,11 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
 - **Two-dimensional inlets with spillage (TN 1921, pp. 17–20):**
   - The hyperbolic part of the shock starts on the dividing streamline (free-stream position
     y_m) (p. 17); for a sharp cowl lip the body sonic point SB is at the lip (p. 18).
-  - Spillage, eq. (30), p. 18: τ = 1 − y_m / y_SB (the fraction of the maximum inlet mass flow
-    that passes outside the cowl).
+  - Spillage, eq. (30), p. 18: τ = 1 − y_m / y_SB; τ is the report's "fraction of maximum
+    possible inlet mass flow that passes outside cowl" (symbol list, p. 4). Moeckel applies the
+    method to inlet spillage himself, eqs. (30)–(36), pp. 18–19.
   - Shock referred to the dividing streamline, eqs. (31)–(32), pp. 18–19:
-    β (y − y_m) = √(x² − x₀²), with x₀ = β (y_S − y_m) √(β² tan² ε_S − 1).
+    β (y − y_m) = √(x² − x₀²), with x₀ = β (y_S − y_m) √(β² tan² φ_S − 1).
   - Continuity, eq. (34), p. 19: A_s/A₀ = (y_S − y_SB) / ((y_S − y_m) cos λ_S) = B, so
     eq. (35), p. 19: y_S / y_SB = (1 − (y_m/y_SB) B cos λ_S) / (1 − B cos λ_S).
   - Shock location, eqs. (33)/(36), p. 19: the distance L from the vertex of the shock to the
@@ -153,17 +160,23 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
     (p. 20) that the distance of the shock from the inlet lip increases linearly with the air
     that passes outside the inlet; figure 12 (p. 32) gives shock location and additive drag
     vs spillage at M₀ = 2.0.
-- **Precedent for inlet spillage at reduced mass-flow ratio:** Sibulkin, NACA Report 1187,
+- **Further precedent for inlet spillage at reduced mass-flow ratio:** Sibulkin, NACA Report 1187,
   p. 6 ("the theory of reference 3", Moeckel TN 1921, predicts a linear variation of
   additive drag with mass-flow ratio) and p. 7 (the bow-wave position L/y = K(1 − m/m_max),
   "based upon a derivation in reference 3").
-- **Application to Busemann's 2D ramp inlet (Busemann's extension; label it as such):**
-  - The upstream state is **region n** (M₀ → M_n, the upstream direction → φ_n), not the free
-    stream: the expelled shock stands in the flow already turned by the ramp shocks.
-  - x along φ_n, y normal to φ_n measured from the ramp surface, which takes the role of
-    Moeckel's symmetry axis (an inviscid wall is a symmetry plane).
-  - y_SB = the lip's distance from the ramp surface, normal to φ_n (sharp lip = SB, p. 18);
-    y_m = y_SB (1 − τ), with τ = 1 − MFR/MFR_crit from item 3a.
+- **Application to Busemann's 2D ramp inlet (Busemann extension, ACCEPTED):**
+  - **Rule:** the expelled shock stands in region n (behind the last ramp shock) instead of the
+    free stream, so every Moeckel quantity referenced to the free stream uses the region-n state
+    instead: the Mach number (M₀ → M_n, β = √(M_n² − 1)), the Mach-line asymptotes (at the
+    region-n Mach angle μ_n), and η = λ_S(M_n), measured from the region-n flow direction θ_n.
+  - **Citation:** "Moeckel, NACA TN 1921 (1949), eqs. (4), (6)/(6a), (14), (17), (30)–(36),
+    pp. 7–19, applied to the flow behind the last ramp shock (Busemann extension)".
+  - x along θ_n, y normal to θ_n measured from the last ramp segment (parallel to θ_n), which
+    takes the role of Moeckel's symmetry axis (an inviscid wall is a symmetry plane).
+  - y_SB = the lip's distance from the last ramp segment, normal to θ_n (sharp lip = SB,
+    p. 18); y_m = y_SB (1 − τ), with τ = 1 − MFR/MFR_crit from item 3a.
+  - Below the dividing streamline the shock is taken normal to θ_n (x = x₀, 0 ≤ y ≤ y_m):
+    Moeckel's analysis "is independent of the nature of the shock below this origin" (p. 18).
   - Output: the shock vertex distance L(τ) ahead of the lip and the hyperbola, which item 4
     intersects with ramp shock n.
 - **Validity range.** Moeckel: not valid near M₀ = 1 (p. 14, the subsonic region grows
@@ -181,7 +194,7 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
     unseparated, the vortex sheet moves from outside the cowling inward as the entering flow
     is reduced, and the fluctuations start when the sheet enters the inlet." Concluding
     Remarks, p. 25, restate this.
-  - p. 7, finding 2: the stable volume-flow regulation "was a minimum (zero) when the conical
+  - p. 7, finding 2 (CONFIRMED): the stable volume-flow regulation "was a minimum (zero) when the conical
     shock was at the lip of the cowling", and "increased … as the conical shock became farther
     removed from the cowling lip". Concluding Remarks, p. 25: the minimum stable entering
     volume flow is a function of the cowling-position parameter.
@@ -191,11 +204,11 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
   equal pressure: below T the flow crossed ramp shock n and then the expelled shock; above T it
   crosses only the expelled shock, in region n − 1 flow. That direction comes from a
   triple-point (shock-polar) solution within the shock model; the simplest approximation is
-  the region-n flow direction φ_n. **Buzz onset** is the largest spillage τ (smallest MFR) at
+  the region-n flow direction θ_n. **Buzz onset** is the largest spillage τ (smallest MFR) at
   which the sheet still passes outside the lip; fluctuations start once it passes below the
   lip, i.e. enters the cowl.
 - **Qualitative check (from p. 7, finding 2):** at the design point the ramp shocks focus on
-  the lip, so T forms just below and ahead of the lip and the sheet (about along φ_n,
+  the lip, so T forms just below and ahead of the lip and the sheet (about along θ_n,
   shallower than shock n) passes inside the lip at once: **almost no stable range for on-lip
   operation**, as Ferri & Nucci found with the conical shock at the lip. Below the design Mach
   the ramp shocks lie ahead of the lip and a finite stable range appears, growing as they move
@@ -204,15 +217,19 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
   boundary-layer separation on the compression surface a lambda shock forms and gives a second
   vortex sheet inside the inlet; fluctuations start when it approaches the inner cowl surface,
   and "the stable range of regulation of entering volume flow was less than for the previous
-  case". Busemann does not model it. To be shown automatically when the existing separation
-  check (`inletdesign.separation`) flags any ramp shock for the design:
+  case". p. 7 (CONFIRMED; summarising the tests of their references 1–4): "stable
+  subcritical conditions were obtained only for very small entering-flow reductions when
+  separation was present on the central body". Busemann does not model it. Shown
+  automatically when the existing separation check (`inletdesign.separation`) flags any ramp
+  shock for the design:
   - a line under the characteristic chart: "If the ramp boundary layer separates (the
     separation check flags it for this design), the real stable range is likely smaller than
     shown (Ferri & Nucci, RM L50K30).";
-  - a Verification item (category "buzz", info): "Ramp boundary-layer separation not modelled
-    in the buzz estimate", criterion "separation check flags ramp shock k", source "Ferri &
-    Nucci, NACA RM L50K30, Summary p. 1 and Concluding Remarks p. 25", text with the CFD
-    statement. Implemented together with the chart in M9c.
+  - a Verification item (warning, category "buzz"): "Ramp separation reduces the buzz margin
+    (approximate)", source "Ferri & Nucci, NACA RM L50K30 (1951), p. 7 and Concluding
+    Remarks pp. 25–26; tests on conical inlets, M 1.9–2.7. Applying it to a 2D multi-ramp
+    inlet is a Busemann extension." (+ "Extrapolated beyond the tested Mach range." for
+    M∞ > 2.7).
 - **Validity range and labels.**
   - Ferri & Nucci tested nose (conical, axisymmetric) inlets at M 1.90–2.70 (Summary, p. 1;
     p. 7, finding 1; p. 26). Buzz results at **M∞ > 2.7** are labelled "extrapolated beyond
@@ -283,3 +300,22 @@ the lip) is a direct qualitative check of what the model predicts.
 2. A throttle definition for the chart's parameter: the exit static pressure p_x/p0∞ (swept
    automatically over the characteristic; no user input needed unless an operating point is
    wanted).
+
+## Results for the validation design (M 3.0 design, 2 ramps; diffuser area ratio 2)
+
+| M∞ | M_n | τ_b exact | A0/Ac at onset, exact | τ_b θ_n fallback | A0/Ac, fallback |
+|---|---|---|---|---|---|
+| 2.5 | 1.130 | 0.0391 | 0.7370 | 0.0383 | 0.7376 |
+| 2.75 | 1.342 | 0.0461 | 0.8459 | 0.0559 | 0.8373 |
+| 3.0 (on-lip) | 1.507 | 0 | 1.0000 | 0 | 1.0000 |
+
+- At M 3.0 the strong–strong shock polars do not intersect (one strong shock from region 1
+  gives a lower pressure than the two-shock path through region 2), so the exact triple
+  point has no solution and the θ_n fallback is used; both give a zero stable range,
+  consistent with Ferri & Nucci p. 7, finding 2.
+- The stable range ΔMFR = MFR_crit τ_b grows from 0 at the design point to about 0.044 near
+  M 2.6–2.7 as the shocks move ahead of the lip (Ferri & Nucci's trend), then shrinks again
+  towards ramp-shock detachment (M∞ ≈ 2.39), where M_n → 1 and Moeckel's method loses
+  validity (TN 1921, p. 14). The tests check the trend only from the design point down to
+  M 2.75.
+

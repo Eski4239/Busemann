@@ -28,6 +28,7 @@ class Inputs:
     inlet_width_m: float = None         # inlet width (span), m; None = per metre only
     diffuser_recovery: float = 0.97     # subsonic diffuser p0 ratio (estimate)
     cowl_frontal_height: float = 0.10   # cowl frontal height / h_c (drag estimate only)
+    diffuser_area_ratio: float = 2.0    # subsonic diffuser exit/entry area (characteristic)
 
 
 CAPTURE_MODES = ("height", "mass_flow")

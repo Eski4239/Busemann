@@ -6,7 +6,7 @@ the cowl angle with θmax below). Hover a point for its numbers; click one and "
 design" sets n, the design Mach and (when constrained) the max cowl angle as one undo step.
 The numbers come from a worker thread, curve by curve, cached by (M, γ).
 """
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
@@ -21,8 +21,20 @@ from ..tooltips import tip
 from ..widgets import SegmentedControl
 
 VIEWS = (("turning", "Recovery vs turning"), ("mach", "Recovery vs design Mach"),
-         ("drag", "Drag (inviscid estimate)"))
-PAGES = {"turning": 0, "mach": 1, "drag": 2}
+         ("drag", "Drag (inviscid estimate)"), ("char", "Inlet characteristic"))
+PAGES = {"turning": 0, "mach": 1, "drag": 2, "char": 3}
+CHAR_TITLE = "Recovery vs mass-flow ratio at M∞ {M:.2f} (approximate)"
+BUZZ_LINE_TEXT = "buzz onset (Ferri–Nucci, approximate)"
+BUZZ_BAND_TEXT = "buzz (approximate)"
+SEPARATION_LINE = ("If the ramp boundary layer separates (the separation check flags it for "
+                   "this design), the real stable range is likely smaller than shown (Ferri & "
+                   "Nucci, RM L50K30).")
+EXTRAPOLATED_TEXT = "Buzz onset extrapolated beyond the tested Mach range (M 1.9–2.7)."
+EXTENSION_TIP = ("Ferri–Nucci criterion (NACA RM L50K30): buzz starts when the vortex sheet "
+                 "from the shock intersection enters the cowl. Tested on conical inlets at "
+                 "M 1.9–2.7; applying it to a 2D multi-ramp inlet is a Busemann extension. "
+                 "The expelled-shock position follows Moeckel (NACA TN 1921) in the flow "
+                 "behind the last ramp shock.")
 DRAG_CAPTION = ("Inviscid estimate: pressure drag only, no skin friction. Coefficients per "
                 "unit width on q∞ × capture height; cowl frontal height {h:.2f} × capture "
                 "height (Design ▸ Advanced).")
@@ -177,6 +189,34 @@ class AnalyticsTab(QWidget):
         self.pages.addWidget(page_m)
         self.pages.addWidget(page_d)
 
+        # M9c: inlet characteristic and buzz onset at the off-design slider Mach
+        self.char_chart = TradeChart(CHAR_TITLE.format(M=3.0), "analytics.char",
+                                     "Mass-flow ratio A0/Ac", "Recovery p0/p0∞",
+                                     min_height=200, end_labels=False)
+        self.char_caption = QLabel("")
+        self.char_caption.setObjectName("chartLegend")
+        self.char_caption.setWordWrap(True)
+        self.char_caption.setToolTip(EXTENSION_TIP)
+        self.char_separation = QLabel(SEPARATION_LINE)
+        self.char_separation.setObjectName("chartLegend")
+        self.char_separation.setWordWrap(True)
+        self.char_separation.setToolTip(tip("analytics.char_separation"))
+        self.char_separation.hide()
+        self.char_takeaway = self._takeaway("analytics.takeaway")
+        page_c = QWidget()
+        vc = QVBoxLayout(page_c)
+        vc.setContentsMargins(0, 0, 0, 0)
+        vc.addWidget(self.char_chart, 1)
+        vc.addWidget(self.char_takeaway)
+        vc.addWidget(self.char_caption)
+        vc.addWidget(self.char_separation)
+        self.pages.addWidget(page_c)
+        self.characteristic = None
+        self._char_timer = QTimer(self)
+        self._char_timer.setSingleShot(True)
+        self._char_timer.setInterval(120)            # coalesce slider updates
+        self._char_timer.timeout.connect(self.update_characteristic)
+
         self.selection_label = QLabel(NO_SELECTION)
         self.selection_label.setObjectName("muted")
         self.selection_label.setWordWrap(True)
@@ -185,7 +225,9 @@ class AnalyticsTab(QWidget):
         self.apply_button.setEnabled(False)
         self.apply_button.setToolTip(tip("analytics.apply"))
         self.apply_button.clicked.connect(self.apply_selection)
-        bottom = QHBoxLayout()
+        self.selection_row = QWidget()
+        bottom = QHBoxLayout(self.selection_row)
+        bottom.setContentsMargins(0, 0, 0, 0)
         bottom.addWidget(self.selection_label, 1)
         bottom.addWidget(self.apply_button)
 
@@ -195,20 +237,29 @@ class AnalyticsTab(QWidget):
         layout.setSpacing(tokens.space(1))
         layout.addLayout(top)
         layout.addWidget(self.pages, 1)
-        layout.addLayout(bottom)
+        layout.addWidget(self.selection_row)
 
         for chart in self._charts():
             chart.picked.connect(lambda key, i, c=chart: self._on_pick(c, key, i))
         state.design_ready.connect(lambda *_: self._on_design())
         state.inputs_changed.connect(lambda *_: self._update_captions())
         state.inputs_changed.connect(lambda *_: self._on_inputs())
+        state.off_design_ready.connect(lambda *_: self._schedule_characteristic())
 
     def _charts(self):
         return (self.turning_chart, self.mach_chart, self.cowl_chart, self.drag_chart,
-                self.rc_chart)
+                self.rc_chart, self.char_chart)
+
+    def _schedule_characteristic(self):
+        if self.current_view() == "char":
+            self._char_timer.start()
 
     def _on_inputs(self):
-        """The cowl frontal height changes only the drag page (no recompute)."""
+        """The cowl frontal height changes only the drag page, the diffuser area ratio only
+        the characteristic (no recompute)."""
+        if self.current_view() == "char" and \
+                self.state.inputs.diffuser_area_ratio != getattr(self, "_drawn_ar", None):
+            self._char_timer.start()
         h = self.state.inputs.cowl_frontal_height
         if h != getattr(self, "_drawn_frontal", None) and self.current_view() == "drag":
             self.update_drag()
@@ -225,9 +276,12 @@ class AnalyticsTab(QWidget):
     def set_view(self, key):
         self.view.set_current(key)
         self.pages.setCurrentIndex(PAGES[key])
+        self.selection_row.setVisible(key != "char")      # nothing to pick there
         self._clear_selection()
         if key == "drag":
             self.update_drag()
+        if key == "char":
+            self.update_characteristic()
 
     def current_view(self):
         return self.view.current()
@@ -576,6 +630,103 @@ class AnalyticsTab(QWidget):
             f"Recovery {c.recovery_total[i]:.4f}",
             f"{T.CD_COWL} {cds[i]:.4f} (inviscid estimate)",
             f"Ramp angles: {_angles(c.ramps_deg[i])}"])
+
+    # --- inlet characteristic (M9c) ---------------------------------------------------------
+    def update_characteristic(self):
+        """Characteristic and buzz onset of the design at the off-design slider Mach (closed
+        form plus small root-finds on the GUI thread, ~0.1 s; coalesced by a timer)."""
+        d, off = self.state.design, self.state.off_design
+        ar = self.state.inputs.diffuser_area_ratio
+        self._drawn_ar = ar
+        chart = self.char_chart
+        chart.clear()
+        self.char_separation.setVisible(False)
+        self.characteristic = None
+        if d is None or off is None or not d.inputs.n_ramps:
+            self.char_takeaway.setText("No characteristic: the design needs ramps and an "
+                                       "attached off-design point.")
+            self.char_caption.setText("")
+            return
+        try:
+            c = api.inlet_characteristic(d, off, ar)
+        except ValueError as exc:
+            self.char_takeaway.setText(f"No characteristic at M∞ {off.M_inf:.2f}: {exc}.")
+            self.char_caption.setText("")
+            return
+        self.characteristic = c
+        chart.title.setText(CHAR_TITLE.format(M=c.M_inf))
+        crit = c.critical
+
+        def sup_text(i):
+            p = c.supercritical[i]
+            return "<br>".join([
+                "Supercritical (quasi-1D)", f"Throttle p<sub>x</sub>/p<sub>0∞</sub> "
+                f"{p.p_exit:.4f}", f"Shock Mach {p.M_shock:.3f} at A/A<sub>e</sub> "
+                f"{p.area_shock:.2f}", f"Recovery {p.recovery:.4f}", f"A0/Ac {p.mfr:.4f}"])
+
+        chart.set_series("super", [p.mfr for p in c.supercritical],
+                         [p.recovery for p in c.supercritical], sup_text,
+                         label="supercritical (quasi-1D)", pickable=False)
+        crit_text = (f"Critical point at M∞ {c.M_inf:.2f}<br>Recovery {crit.recovery:.4f}"
+                     f"<br>A0/Ac {crit.mfr:.4f}<br>Throttle p<sub>x</sub>/p<sub>0∞</sub> "
+                     f"{crit.p_exit:.4f}")
+        chart.set_marker(crit.mfr, crit.recovery, crit_text)
+        if c.buzz is None:
+            self.char_takeaway.setText(T.characteristic(c))
+            self.char_caption.setText(c.note[:1].upper() + c.note[1:] + ".")
+            return
+        tau_b = c.buzz.tau
+
+        def sub_text(points):
+            def text(i):
+                p = points[i]
+                shock = api.moeckel_shock(d, off, p.tau) if p.tau else None
+                lines = ["Subcritical (approximate)", f"Throttle p<sub>x</sub>/p<sub>0∞</sub> "
+                         f"{p.p_exit:.4f}", f"Spilled fraction τ {p.tau:.3f}"]
+                if shock is not None:
+                    lines.append(f"Shock {shock.L / d.inputs.capture_height:.3f} × capture "
+                                 "height ahead of the lip (Moeckel)")
+                lines += [f"Recovery {p.recovery:.4f}", f"A0/Ac {p.mfr:.4f}"]
+                if p.tau >= tau_b:
+                    lines.append("past the buzz onset (Ferri–Nucci, approximate)")
+                return "<br>".join(lines)
+            return text
+
+        stable = [p for p in c.subcritical if p.tau <= tau_b]
+        if not stable or stable[-1].tau < tau_b:
+            stable = stable + [_point_at(c, tau_b, d.inputs.gamma)]
+        beyond = [stable[-1]] + [p for p in c.subcritical if p.tau > tau_b]
+        chart.set_series("sub", [p.mfr for p in stable], [p.recovery for p in stable],
+                         sub_text(stable), label="subcritical (approximate)", pickable=False)
+        chart.set_series("buzz", [p.mfr for p in beyond], [p.recovery for p in beyond],
+                         sub_text(beyond), label="beyond buzz onset (approximate)",
+                         pickable=False)
+        chart.set_vline(c.buzz.mfr, BUZZ_LINE_TEXT)
+        chart.set_bands([(min(p.mfr for p in beyond), c.buzz.mfr, BUZZ_BAND_TEXT)])
+        chart.plot.getPlotItem().enableAutoRange()
+        chart.place_band_text()
+        self.char_takeaway.setText(T.characteristic(c))
+        parts = [f"Buzz onset A0/Ac {c.buzz.mfr:.4f} "
+                 f"({'exact triple point' if c.buzz.exact_used else 'sheet along the region-n flow'}"
+                 f"); θ<sub>n</sub> fallback {c.buzz_fallback.mfr:.4f}."]
+        if c.buzz.extrapolated:
+            parts.append(EXTRAPOLATED_TEXT)
+        parts.append("2D multi-ramp application of the criterion: Busemann extension.")
+        self.char_caption.setText(" ".join(parts))
+        flagged = any(s.shock.startswith("ramp") and s.flagged for s in d.separation)
+        self.char_separation.setVisible(flagged)
+
+
+def _point_at(c, tau, gamma):
+    """The subcritical point at exactly tau (the buzz onset) on the ideal flat branch."""
+    from inletdesign import characteristic as _char
+
+    crit = c.critical
+    m_crit = _char.mass_flow_function(crit.M_exit, gamma)
+    M_x = _char.mach_from_mass_flow(m_crit * (1.0 - tau), gamma) if tau > 0 else crit.M_exit
+    return _char.CharPoint(mfr=crit.mfr * (1.0 - tau), recovery=crit.recovery,
+                           p_exit=crit.recovery * _char.p_over_pt(M_x, gamma), M_exit=M_x,
+                           tau=tau)
 
 
 def gap_label(reason):

@@ -22,8 +22,11 @@ N_COLORS = {0: tokens.COLORS["text_muted"], 1: "#93B4F2", 2: "#5B8DEF",
 SPECIAL = {"isentropic": tokens.COLORS["text"], "mil": tokens.COLORS["warn"],
            "theta": tokens.COLORS["error"],
            # drag (M9b): additive, cowl and their sum
-           "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"]}
-DASHED = ("isentropic", "mil", "theta", "total")
+           "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"],
+           # inlet characteristic (M9c)
+           "super": tokens.COLORS["accent"], "sub": tokens.COLORS["accent"],
+           "buzz": tokens.COLORS["error"]}
+DASHED = ("isentropic", "mil", "theta", "total", "buzz")
 BAND_ALPHA = 28
 
 
@@ -152,12 +155,11 @@ class TradeChart(QWidget):
             self.legend.setText(self.legend_html())
 
     def legend_html(self):
-        """Legend entries in key order: ramp counts, then the dashed reference lines."""
-        def order(k):
-            return (0, k) if isinstance(k, int) else (1, str(k))
-
+        """Legend entries: ramp counts in order, then the other series as they were added."""
+        keys = list(self.series)
+        order = sorted(k for k in keys if isinstance(k, int)) +             [k for k in keys if not isinstance(k, int)]
         parts = []
-        for key in sorted(self.series, key=order):
+        for key in order:
             s = self.series[key]
             if not s["name"]:
                 continue

@@ -77,7 +77,7 @@ menus or windows, never extra rows on existing panels unless listed here.
    buzz, cowl detachment, real gas, upper-bound recovery, drag estimates), each with
    severity, the criterion used, its source and "must be verified with a CFD solver".
 
-## D. Analytics tab (M9; D.1 in M9a, D.2 in M9b) — all approximate items titled "(approximate)"
+## D. Analytics tab (M9; D.1 in M9a, D.2 in M9b, D.3 in M9c) — all approximate items titled "(approximate)"
 
 1. **Trade study (M9a, shipped; exact within the model, no "approximate" label):** a
    segmented control "Recovery vs turning" | "Recovery vs design Mach".
@@ -123,10 +123,22 @@ menus or windows, never extra rows on existing panels unless listed here.
      subcritical spillage, the cowl beyond its frontal height, 3D effects).
    - M9a fixes: the turning takeaway compares at equal turning first, then the
      unconstrained optima; zoom / fit are hidden on the Analytics and Compare tabs.
-3. **Inlet characteristic and buzz (approximate):** recovery vs mass-flow ratio
-   (supercritical / critical / subcritical), buzz onset marked with a named empirical
-   criterion (e.g. Ferri–Nucci or Dailey). Sources required; model choices reviewed
-   before implementation.
+3. **Inlet characteristic and buzz (M9c, shipped; approximate; model note
+   `docs/m9c_model.md`):** Analytics ▸ "Inlet characteristic", for the design at the
+   off-design slider Mach.
+   - Critical point (existing model); supercritical branch, quasi-1D, for the new input
+     "Diffuser exit/entry area ratio" (Design ▸ Advanced, 1–4, default 2, display-only);
+     ideal flat subcritical branch, MFR = MFR_crit (1 − τ).
+   - Expelled-shock position: Moeckel, NACA TN 1921, applied to the flow behind the last
+     ramp shock (Busemann extension: M_n, μ_n, η = λ_S(M_n) from θ_n).
+   - Buzz onset: Ferri & Nucci, NACA RM L50K30 — the vortex sheet from the triple point
+     enters the cowl; exact shock-polar triple point, with the sheet along θ_n as the
+     fallback where the polars do not intersect. Labelled "approximate"; "extrapolated
+     beyond the tested Mach range" for M∞ > 2.7; the 2D multi-ramp application is stated
+     as a Busemann extension. The on-lip case has no stable range (Ferri & Nucci p. 7).
+   - Separation: a line under the chart and a Verification warning "Ramp separation
+     reduces the buzz margin (approximate)" whenever the separation check flags a ramp
+     shock. Not modelled above the design Mach (shock-in-duct).
 
 ## E. Verification notes export
 

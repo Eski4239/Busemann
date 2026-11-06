@@ -113,6 +113,12 @@ class DesignPanel(QWidget):
         attach(self.cowl_height, "field.cowl_frontal_height")
         grid.addRow(field_label("Cowl frontal height", "label.cowl_frontal_height"),
                     self.cowl_height)
+        # M9c: subsonic diffuser exit/entry area ratio for the inlet characteristic (Analytics)
+        self.diffuser_ratio = SpinField(i.diffuser_area_ratio, decimals=2, minimum=1.0,
+                                        maximum=4.0, step=0.1, quantity="dimensionless")
+        attach(self.diffuser_ratio, "field.diffuser_area_ratio")
+        grid.addRow(field_label("Diffuser exit/entry area ratio", "label.diffuser_area_ratio"),
+                    self.diffuser_ratio)
         self.advanced = CollapsibleSection("Advanced", advanced_box, collapsed=True,
                                            tooltip=tip("design.advanced"))
 
@@ -173,6 +179,8 @@ class DesignPanel(QWidget):
         self.diffuser.value_changed.connect(lambda v: state.update(diffuser_recovery=v))
         self.cowl_height.value_changed.connect(
             lambda v: state.update(cowl_frontal_height=v))
+        self.diffuser_ratio.value_changed.connect(
+            lambda v: state.update(diffuser_area_ratio=v))
         state.inputs_changed.connect(self.sync)
         state.design_ready.connect(self._show_design)
         self.sync(i)
@@ -224,6 +232,7 @@ class DesignPanel(QWidget):
         self.max_cowl.setEnabled(i.max_cowl_enabled and i.method != "custom")
         self.diffuser.set_value(i.diffuser_recovery)
         self.cowl_height.set_value(i.cowl_frontal_height)
+        self.diffuser_ratio.set_value(i.diffuser_area_ratio)
         for field in (self.capture, self.width_field):
             field.set_decimals(_DECIMALS_LENGTH[system])
             field.set_unit(_units.unit_label("length", system))
