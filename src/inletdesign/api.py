@@ -899,10 +899,12 @@ def trade_vs_design_mach(M_grid=TRADE_MACH_GRID, gamma=1.4, n_list=TRADE_N_MACH)
 # --- drag (M9b, addendum D.2): inviscid pressure drag per unit width ------------------------
 # Coefficients on the freestream dynamic pressure and the capture height:
 #   C_D = D' / (q_inf h_c),  q_inf = gamma/2 p_inf M_inf^2  (D' per unit width).
-# SOURCE (additive drag definition, PENDING user confirmation): M. Sibulkin, "Theoretical
-# and Experimental Investigation of Additive Drag", NACA Report 1187 (1954; supersedes NACA
-# RM E51B13, 1951): the additive drag is the x-component of the pressure force (p - p_inf)
-# on the entering streamtube between the free stream and the inlet lip.
+# SOURCE (additive drag definition, confirmed): M. Sibulkin, "Theoretical and Experimental
+# Investigation of Additive Drag", NACA Report 1187 (1954; supersedes NACA RM E51B13, 1951),
+# eq. (5)/(5a), p. 2: D_a = m V1 + A1 (p1 - p0) - m V0, the change in total momentum of the
+# entering stream tube; p. 3: equivalently the integral of (p - p0) dA_x over the stream
+# tube from the free stream to the inlet (momentum theorem). The report treats axisymmetric
+# inlets; Busemann applies the definition per unit width in 2D.
 # Cowl pressure drag: Busemann model choice (the oblique-shock pressure, NACA 1135 eq. 128,
 # acting on the cowl's frontal height); no published criterion cited.
 
@@ -950,9 +952,11 @@ def _check_off(design_result, off):
 
 def additive_drag(design_result, off):
     """C_D,add = sum_k (p_k/p_inf - 1) dy_k / (gamma/2 M_inf^2 h_c) along the dividing
-    streamline (the streamline ending at the cowl lip), freestream to lip. Its segments lie
-    in the regions behind the shocks it crosses; the one ending at the lip is in the lip's
-    region. Exactly 0 when the streamline is only the lip (at and above the design Mach)."""
+    streamline (the streamline ending at the cowl lip), freestream to lip: the pressure-
+    integral form of the additive drag, Sibulkin NACA Report 1187, p. 3 (per unit width).
+    Its segments lie in the regions behind the shocks it crosses; the one ending at the lip
+    is in the lip's region. Exactly 0 when the streamline is only the lip (at and above the
+    design Mach)."""
     _check_off(design_result, off)
     gamma = design_result.inputs.gamma
     h = design_result.inputs.capture_height
@@ -977,7 +981,8 @@ def _ramp_y(points, x):
 
 
 def additive_drag_momentum(design_result, off):
-    """Independent check of additive_drag: x-momentum balance on the captured streamtube
+    """Independent check of additive_drag, the momentum form of Sibulkin NACA Report 1187
+    eq. (5a), p. 2 (per unit width): x-momentum balance on the captured streamtube
     (upstream face of height A0 = mass capture x h_c in freestream; dividing streamline on
     top; the ramp below, segment i at region i+1's pressure; the vertical entry face
     x = x_lip from the ramp to the lip, split at the ramp-shock crossings), in p_inf units:

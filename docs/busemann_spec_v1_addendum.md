@@ -103,8 +103,9 @@ menus or windows, never extra rows on existing panels unless listed here.
    - *Additive drag* C_D,add = Σ (p_k − p∞) Δy_k / (q∞ h_c) along the dividing streamline
      (freestream to the cowl lip, off-design region data); exactly 0 at and above the
      design Mach. Checked by an independent x-momentum balance on the captured streamtube
-     (agreement to 1e-10 below design, n = 1–4). Definition source: Sibulkin, NACA Report
-     1187 (1954), pending confirmation.
+     (agreement to 1e-10 below design, n = 1–4). Definition source (confirmed): Sibulkin,
+     NACA Report 1187 (1954), eq. (5)/(5a), p. 2, and the equivalent pressure integral,
+     p. 3; axisymmetric in the report, applied per unit width in 2D.
    - *Cowl pressure drag* C_D,cowl = (p_c − p∞) Δh_cowl / (q∞ h_c): the cowl's outer face
      turns the lip's local flow by the required turn + lip wedge (as in the cowl check);
      p_c = local p × oblique-shock p2/p1. Not computable (gap, shaded) when the cowl shock is

@@ -153,7 +153,8 @@ def test_verification_item_and_notes(window, tmp_path):
     item = drag[0]
     for word in ("skin friction", "subcritical spillage", "frontal height", "3D effects"):
         assert word in item.text
-    assert "NACA Report 1187" in item.source and "pending" in item.source
+    assert "NACA Report 1187" in item.source and "eq. (5)/(5a), p. 2" in item.source
+    assert "per unit width" in item.source and "pending" not in item.source
     from busemann.export import notes as N
     from busemann.export.metadata import metadata
     text = N.render(metadata(window.state.inputs, "geometry DXF"), items)

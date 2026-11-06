@@ -2,9 +2,11 @@
 dividing streamline, checked by an independent momentum balance, and the cowl pressure drag
 on its frontal height. Coefficients per unit width on q_inf h_c.
 
-SOURCE (additive-drag definition, PENDING user confirmation): M. Sibulkin, "Theoretical and
-Experimental Investigation of Additive Drag", NACA Report 1187 (1954; supersedes NACA RM
-E51B13, 1951). Expected values here are identities or self-consistency checks."""
+SOURCE (additive-drag definition, confirmed): M. Sibulkin, "Theoretical and Experimental
+Investigation of Additive Drag", NACA Report 1187 (1954; supersedes NACA RM E51B13, 1951),
+eq. (5)/(5a), p. 2 (momentum form, additive_drag_momentum) and p. 3 (the equivalent pressure
+integral, additive_drag); axisymmetric in the report, applied per unit width in 2D.
+Expected values here are identities or self-consistency checks."""
 import math
 
 import pytest

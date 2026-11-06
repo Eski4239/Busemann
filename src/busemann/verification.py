@@ -57,9 +57,11 @@ VALIDATION_SUMMARY = (
     "was 4.9% lower at Mach 3.25).")
 MIL_SOURCE = ("MIL-E-5008B (1959), as given by NASA Glenn Research Center, 'Inlet "
               "Performance', https://www.grc.nasa.gov/WWW/BGH/inleth.html (formula confirmed)")
-DRAG_SOURCE = ("Additive drag as defined in M. Sibulkin, 'Theoretical and Experimental "
-               "Investigation of Additive Drag', NACA Report 1187 (1954) (pending "
-               "confirmation); cowl pressure drag: Busemann model choice (oblique-shock "
+DRAG_SOURCE = ("Additive drag: M. Sibulkin, 'Theoretical and Experimental Investigation "
+               "of Additive Drag', NACA Report 1187 (1954), eq. (5)/(5a), p. 2 (change in "
+               "total momentum of the entering stream tube; p. 3, the equivalent pressure "
+               "integral); the report treats axisymmetric inlets, applied here per unit "
+               "width in 2D. Cowl pressure drag: Busemann model choice (oblique-shock "
                "relations, NACA Report 1135)")
 KORKEGI_TOOLTIP = (f"{_sep.KORKEGI_CRITERION}. Source: {_sep.KORKEGI_SOURCE}. "
                    f"Korkegi: {_sep.KORKEGI_SCOPE}.")
