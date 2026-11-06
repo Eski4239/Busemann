@@ -122,14 +122,14 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.offdesign_tab, "Off-design")
         self.tabs.setTabToolTip(0, tip("tab.design"))
         self.tabs.setTabToolTip(1, tip("tab.offdesign"))
-        self.analytics_tab = _placeholder(
-            "Analytics", "Trade studies, drag and buzz estimates — coming in M9.",
-            "placeholder.analytics")
+        from .views.analytics_tab import AnalyticsTab
+
+        self.analytics_tab = AnalyticsTab(self.state)
         self.compare_tab = _placeholder(
             "Compare", "Side-by-side design comparison — coming in M10.", "placeholder.compare")
         self.tabs.addTab(self.analytics_tab, "Analytics")
         self.tabs.addTab(self.compare_tab, "Compare")
-        self.tabs.setTabToolTip(2, tip("placeholder.analytics"))
+        self.tabs.setTabToolTip(2, tip("tab.analytics"))
         self.tabs.setTabToolTip(3, tip("placeholder.compare"))
         self.tabs.currentChanged.connect(self._on_tab)
 
@@ -322,6 +322,8 @@ class MainWindow(QMainWindow):
             canvas.set_layer_visible(name, visible)
 
     def _on_tab(self, _index):
+        # the layer toggles belong to the canvases (Design, Off-design), not Analytics/Compare
+        self.view_row.setVisible(self.tabs.currentWidget() in (self.canvas, self.offdesign_tab))
         view = "offdesign" if self.tabs.currentWidget() is self.offdesign_tab else "design"
         self.state.set_active_view(view)
         canvas = self.current_canvas()
@@ -505,6 +507,7 @@ class MainWindow(QMainWindow):
         self.project.dirty = False                 # decided: later closes must not ask again
         self._warm_timer.stop()
         self._stop_warm()                              # stop a running warm-up
+        self.analytics_tab.shutdown()
         self.state.shutdown()
         super().closeEvent(event)
 

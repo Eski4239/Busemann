@@ -77,10 +77,27 @@ menus or windows, never extra rows on existing panels unless listed here.
    buzz, cowl detachment, real gas, upper-bound recovery, drag estimates), each with
    severity, the criterion used, its source and "must be verified with a CFD solver".
 
-## D. Analytics tab (M9) — all approximate items titled "(approximate)"
+## D. Analytics tab (M9; D.1 in M9a) — all approximate items titled "(approximate)"
 
-1. **Trade study:** recovery vs number of ramps 0–4 plus the isentropic (n → ∞) limit,
-   at the current design Mach; second axis: cowl angle. Optional sweep over design Mach.
+1. **Trade study (M9a, shipped; exact within the model, no "approximate" label):** a
+   segmented control "Recovery vs turning" | "Recovery vs design Mach".
+   - *Vs turning* (at the current design Mach): for n = 1–4 the cowl-constrained
+     Oswatitsch optimum at each total turning δ (= cowl angle), from 0.5° up to n's
+     unconstrained cowl angle; the isentropic limit (dashed: ν(M_f) = ν(M∞) − δ, then a
+     normal shock at M_f, stopping at M_f = 1); a vertical θmax(M∞) line "cowl shock
+     detaches beyond here"; this design as a ring.
+   - *Vs design Mach* (1.2–7.0): the unconstrained optimum for n = 0–4 (n = 0: normal
+     shock) and the MIL-E-5008B line (compare with the engine-face estimate, recovery ×
+     the current diffuser recovery); below it, cowl angle vs design Mach per n with the
+     θmax(M∞) curve.
+   - Hover a point: n, δ or M, recovery, ramp angles. Click a point, then "Apply this
+     design" sets n, the design Mach and (cowl-limited points) the max cowl angle as one
+     undo step; isentropic points cannot be applied.
+   - A computed one-line takeaway under each chart (e.g. the recovery gained and the extra
+     cowl turning from n to n + 1 ramps, with a note when that passes θmax).
+   - Computed on a worker thread, curve by curve, cached by (M, γ); the full tab takes
+     under 1 s (core `api.trade_vs_turning`, `isentropic_vs_turning`,
+     `trade_vs_design_mach`). The canvas layer toggles are hidden on this tab.
 2. **Cowl and additive (spillage) drag (approximate):** cowl external pressure drag and
    additive drag vs M∞ for the current design; "not computable" where the cowl shock is
    detached. Sources required.

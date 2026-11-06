@@ -87,6 +87,16 @@ def main():
     settle()
     problems += [dict(p, tab="Off-design")
                  for p in clipped_widgets(window) + panel_overflow(window)]
+    # M9a: the Analytics tab, both views, once its curves are drawn
+    window.tabs.setCurrentWidget(window.analytics_tab)
+    settle(1500)
+    for view in ("turning", "mach"):
+        window.analytics_tab.set_view(view)
+        settle(300)
+        problems += [dict(p, tab=f"Analytics {view}")
+                     for p in clipped_widgets(window) + panel_overflow(window)]
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    settle(300)
     result = {"dpr": window.devicePixelRatioF(), "size": [window.width(), window.height()],
               "problems": problems}
     window.explain_action.setChecked(True)                     # drawer open: narrow centre

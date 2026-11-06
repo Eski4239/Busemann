@@ -710,3 +710,187 @@ def recovery_sensitivity(design_result, step_deg=0.01):
         else:
             out.append(None)
     return tuple(out)
+
+
+# --- trade study (M9a, Analytics tab; exact within the model) --------------------------------
+
+TRADE_N_TURNING = (1, 2, 3, 4)
+TRADE_N_MACH = (0, 1, 2, 3, 4)
+TRADE_MACH_GRID = tuple(round(1.2 + 0.1 * k, 10) for k in range(59))    # 1.2 .. 7.0
+TRADE_DELTA_MIN = 0.5      # deg: first point of a default turning grid
+TRADE_DELTA_POINTS = 40
+
+
+@dataclass(frozen=True)
+class TurningCurve(_Serialisable):
+    """Cowl-constrained Oswatitsch optimum vs total turning delta (= cowl angle) for n ramps.
+    The last point is the unconstrained optimum (delta = cowl_opt_deg)."""
+    n: int
+    delta_deg: tuple
+    recovery_total: tuple
+    recovery_oblique: tuple
+    ramps_deg: tuple         # per point: incremental ramp angles
+    constrained: tuple       # per point: True where the cowl limit is active
+    cowl_opt_deg: float      # unconstrained optimum's cowl angle
+
+
+@dataclass(frozen=True)
+class IsentropicCurve(_Serialisable):
+    """Isentropic compression by delta: nu(M_f) = nu(M) - delta, then a normal shock at M_f.
+    Ends at M_f = 1 (delta = nu(M))."""
+    delta_deg: tuple
+    M_f: tuple
+    recovery: tuple
+
+
+@dataclass(frozen=True)
+class MachCurve(_Serialisable):
+    """Unconstrained Oswatitsch optimum vs design Mach for n ramps (n = 0: normal shock)."""
+    n: int
+    M: tuple
+    recovery_total: tuple
+    cowl_deg: tuple
+    ramps_deg: tuple
+
+
+@dataclass(frozen=True)
+class MachTrade(_Serialisable):
+    curves: tuple            # MachCurve per n
+    M: tuple                 # the design-Mach grid
+    theta_max_deg: tuple     # theta_max(M) over the grid (cowl-shock detachment)
+
+
+def _check_n_list(n_list, allowed):
+    n_list = tuple(n_list)
+    if not n_list or any(not isinstance(n, int) or n not in allowed for n in n_list):
+        raise ValueError(f"ramp counts must be integers in {allowed} (got {n_list!r})")
+    return n_list
+
+
+def _check_grid(grid, name, minimum=None):
+    try:
+        grid = tuple(float(x) for x in grid)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a sequence of numbers") from exc
+    if not grid or any(not math.isfinite(x) for x in grid):
+        raise ValueError(f"{name} must be a non-empty sequence of finite numbers")
+    if any(b <= a for a, b in zip(grid, grid[1:])):
+        raise ValueError(f"{name} must be increasing")
+    if minimum is not None and grid[0] < minimum:
+        raise ValueError(f"{name} values must be ≥ {minimum:g} (got {grid[0]:g})")
+    return tuple(round(x, 10) for x in grid)
+
+
+def _unconstrained(M, n, gamma):
+    from . import optimize as _opt
+
+    return _opt.optimize_equal_strength(M, n, gamma)
+
+
+@lru_cache(maxsize=64)
+def _turning_curve(M, gamma, n, delta_grid):
+    from . import optimize as _opt
+
+    opt = _unconstrained(M, n, gamma)
+    cowl = float(sum(opt["ramps"]))
+    if delta_grid is None:
+        grid = tuple(float(d) for d in np.linspace(TRADE_DELTA_MIN, cowl, TRADE_DELTA_POINTS))
+    else:
+        grid = tuple(d for d in delta_grid if 0.0 < d < cowl) + (cowl,)
+    deltas, total, oblique, ramps, constrained = [], [], [], [], []
+    for k, d in enumerate(grid):
+        last = k == len(grid) - 1
+        r = opt if last else _opt.constrained_optimum(M, n, gamma, d, opt)
+        states = r["states"]
+        deltas.append(cowl if last else float(sum(r["ramps"])))
+        total.append(float(states[-1].p0_ratio))
+        oblique.append(float(states[-2].p0_ratio))
+        ramps.append(tuple(float(a) for a in r["ramps"]))
+        constrained.append(not last and bool(r.get("constrained")))
+    return TurningCurve(n=n, delta_deg=tuple(deltas), recovery_total=tuple(total),
+                        recovery_oblique=tuple(oblique), ramps_deg=tuple(ramps),
+                        constrained=tuple(constrained), cowl_opt_deg=cowl)
+
+
+def trade_vs_turning(M, gamma=1.4, n_list=TRADE_N_TURNING, delta_grid=None):
+    """Recovery vs total turning delta (deg) at design Mach M, for each n in n_list: the
+    cowl-constrained Oswatitsch optimum at each delta, from a small delta up to n's
+    unconstrained cowl angle (inclusive). delta_grid=None uses 40 points from 0.5 deg.
+    Returns a tuple of TurningCurve (one per n, cached per n)."""
+    _check_mach(M)
+    _check_gamma(gamma)
+    n_list = _check_n_list(n_list, TRADE_N_TURNING)
+    grid = None if delta_grid is None else _check_grid(delta_grid, "turning grid", 0.0)
+    M, gamma = round(float(M), 10), round(float(gamma), 10)
+    return tuple(_turning_curve(M, gamma, n, grid) for n in n_list)
+
+
+@lru_cache(maxsize=64)
+def _isentropic_cached(M, gamma, delta_grid):
+    from . import normal_shock as _ns
+    from . import prandtl_meyer as _pm
+
+    nu_inf = float(_pm.nu(M, gamma))
+    if delta_grid is None:
+        delta_grid = tuple(float(d) for d in np.linspace(0.0, nu_inf, 81))
+    deltas, machs, rec = [], [], []
+    for d in delta_grid:
+        if d > nu_inf:
+            break                                     # M_f < 1: the curve stops at sonic
+        nu_f = max(nu_inf - d, 0.0)
+        Mf = 1.0 if nu_f == 0.0 else _pm.mach_from_nu(nu_f, gamma)
+        deltas.append(float(d))
+        machs.append(float(Mf))
+        rec.append(float(_ns.stagnation_pressure_ratio(Mf, gamma)))
+    return IsentropicCurve(delta_deg=tuple(deltas), M_f=tuple(machs), recovery=tuple(rec))
+
+
+def isentropic_vs_turning(M, gamma=1.4, delta_grid=None):
+    """Isentropic-compression limit vs turning delta (deg): nu(M_f) = nu(M) - delta
+    (Prandtl-Meyer), recovery = normal-shock p0 ratio at M_f. Valid for M_f >= 1 only, so the
+    curve stops at delta = nu(M). delta_grid=None uses 81 points from 0 to nu(M)."""
+    _check_mach(M)
+    _check_gamma(gamma)
+    grid = None if delta_grid is None else _check_grid(delta_grid, "turning grid", 0.0)
+    return _isentropic_cached(round(float(M), 10), round(float(gamma), 10), grid)
+
+
+@lru_cache(maxsize=32)
+def _mach_curve(M_grid, gamma, n):
+    from . import optimize as _opt
+
+    rec, cowl, ramps = [], [], []
+    found = []                       # optimal Mn so far: warm start, linearly extrapolated
+    for M in M_grid:
+        if n == 0:
+            r = _opt.optimize_equal_strength(M, 0, gamma)
+        elif not found:
+            r = _unconstrained(M, n, gamma)
+        else:
+            guess = found[-1] if len(found) < 2 else 2.0 * found[-1] - found[-2]
+            r = _opt.optimum_near(M, n, gamma, guess)
+        if n:
+            found.append(r["Mn"])
+        rec.append(float(r["states"][-1].p0_ratio))
+        cowl.append(float(sum(r["ramps"])))
+        ramps.append(tuple(float(a) for a in r["ramps"]))
+    return MachCurve(n=n, M=M_grid, recovery_total=tuple(rec), cowl_deg=tuple(cowl),
+                     ramps_deg=tuple(ramps))
+
+
+@lru_cache(maxsize=16)
+def _theta_max_curve(M_grid, gamma):
+    return tuple(float(_obl.max_deflection(M, gamma)[0]) for M in M_grid)
+
+
+def trade_vs_design_mach(M_grid=TRADE_MACH_GRID, gamma=1.4, n_list=TRADE_N_MACH):
+    """Unconstrained Oswatitsch recovery and cowl angle vs design Mach for each n in n_list
+    (n = 0: a normal shock only), plus theta_max(M) over the grid. Cached per n."""
+    _check_gamma(gamma)
+    n_list = _check_n_list(n_list, TRADE_N_MACH)
+    grid = _check_grid(M_grid, "design-Mach grid")
+    if grid[0] <= 1.0:
+        raise ValueError(f"design Mach values must be > 1 (got {grid[0]:g})")
+    gamma = round(float(gamma), 10)
+    return MachTrade(curves=tuple(_mach_curve(grid, gamma, n) for n in n_list), M=grid,
+                     theta_max_deg=_theta_max_curve(grid, gamma))

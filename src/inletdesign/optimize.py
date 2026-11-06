@@ -7,6 +7,8 @@ Two independent methods are provided so they can cross-check each other:
 - optimize_numerical: brute-force n-dimensional Nelder-Mead search over the
   ramp angles directly, used only as a correctness check on the method above.
 """
+import math
+
 import numpy as np
 from scipy.optimize import brentq, minimize, minimize_scalar
 
@@ -52,7 +54,7 @@ def equal_strength_ramps(M_inf, n_ramps, Mn, gamma=1.4):
     return angles
 
 
-def optimize_equal_strength(M_inf, n_ramps, gamma=1.4, max_turn_deg=None):
+def optimize_equal_strength(M_inf, n_ramps, gamma=1.4, max_turn_deg=None, unconstrained=None):
     """Maximize total pressure recovery over Mn under the equal-strength condition.
 
     Coarse grid scan over (1, M_inf), skipping infeasible Mn, then refines
@@ -63,6 +65,10 @@ def optimize_equal_strength(M_inf, n_ramps, gamma=1.4, max_turn_deg=None):
     with Mn up to the optimum, so an active limit puts the constrained optimum
     where sum(theta) = max_turn_deg (solved with brentq on Mn).
 
+    unconstrained optionally passes a precomputed unconstrained result for the same
+    (M_inf, n_ramps, gamma) (the dict this function returns without a limit), so a sweep
+    over max_turn_deg solves the unconstrained optimum once.
+
     Returns:
         dict with keys: ramps (list[float]), Mn (float or None), recovery
         (float), states (list[FlowState]), constrained (bool).
@@ -71,7 +77,7 @@ def optimize_equal_strength(M_inf, n_ramps, gamma=1.4, max_turn_deg=None):
         states = inlet.compress(M_inf, [], gamma)
         return {"ramps": [], "Mn": None, "recovery": states[-1].p0_ratio, "states": states,
                 "constrained": False}
-    result = _optimize_unconstrained(M_inf, n_ramps, gamma)
+    result = dict(unconstrained) if unconstrained is not None else         _optimize_unconstrained(M_inf, n_ramps, gamma)
     result["constrained"] = False
     if max_turn_deg is None or sum(result["ramps"]) <= max_turn_deg:
         return result
@@ -125,6 +131,30 @@ def _optimize_unconstrained(M_inf, n_ramps, gamma):
     return {"ramps": ramps, "Mn": best_Mn, "recovery": recovery, "states": states}
 
 
+def optimum_near(M_inf, n_ramps, gamma, Mn_guess, window=0.3):
+    """Unconstrained equal-strength optimum found by a bounded search for Mn with
+    Mn - 1 within (Mn_guess - 1) * (1 +- window): a warm start from a nearby design Mach.
+    Infeasible Mn (strong branch, Mn >= M) score 0, as in the full search. Falls back to the
+    full grid search when the optimum lands on the window edge or is infeasible, so the
+    result equals optimize_equal_strength (without a limit) to the optimiser tolerance.
+    """
+    eps = 1e-6 * M_inf
+    excess = Mn_guess - 1.0
+    lo = max(1.0 + eps, 1.0 + excess * (1.0 - window))
+    hi = min(M_inf - eps, 1.0 + excess * (1.0 + window))
+
+    if excess > 0.0 and lo < hi:
+        res = minimize_scalar(lambda Mn: -fast_recovery(M_inf, n_ramps, Mn, gamma),
+                              bounds=(lo, hi), method="bounded")
+        Mn = float(res.x)
+        edge = 1e-3 * (hi - lo)
+        if lo + edge < Mn < hi - edge and fast_recovery(M_inf, n_ramps, Mn, gamma) > 0.0:
+            return _result(M_inf, n_ramps, Mn, gamma, False)
+    result = _optimize_unconstrained(M_inf, n_ramps, gamma)
+    result["constrained"] = False
+    return result
+
+
 def optimize_numerical(M_inf, n_ramps, gamma=1.4):
     """Cross-check optimize_equal_strength via direct Nelder-Mead over ramp angles.
 
@@ -166,3 +196,70 @@ def optimize_numerical(M_inf, n_ramps, gamma=1.4):
     ramps = list(best_result.x)
     states = inlet.compress(M_inf, ramps, gamma)
     return {"ramps": ramps, "Mn": None, "recovery": states[-1].p0_ratio, "states": states}
+
+
+# --- fast equal-strength chain for trade-study searches (M9a) -------------------------------
+# Equal strength fixes beta_i = asin(Mn / M_i) directly, so every ramp is closed form: theta
+# from the theta-beta-M relation, M_{i+1} = Mn2 / sin(beta - theta), the oblique p0 ratio is
+# the normal-shock p0 ratio at Mn. No cubic for beta(theta) is solved (oblique_shock_state
+# does that), which makes a search ~10x cheaper. Only the searches use it; the reported
+# results are rebuilt with equal_strength_ramps / inlet.compress.
+
+def _normal_p0(M, g):
+    """Normal-shock p02/p01 (closed form, as normal_shock.stagnation_pressure_ratio)."""
+    m2 = M * M
+    rho = (g + 1.0) * m2 / ((g - 1.0) * m2 + 2.0)
+    p = 1.0 + 2.0 * g / (g + 1.0) * (m2 - 1.0)
+    return rho ** (g / (g - 1.0)) * p ** (-1.0 / (g - 1.0))
+
+
+def _chain(M_inf, n_ramps, Mn, g):
+    """(ramp angles deg, Mach ahead of the terminal shock, total recovery), or None where
+    equal_strength_ramps would raise (Mn <= 1, Mn >= M_i, strong branch)."""
+    M = M_inf
+    angles = []
+    for _ in range(n_ramps):
+        if Mn <= 1.0 or Mn >= M:
+            return None
+        beta = math.asin(Mn / M)
+        m2 = M * M
+        gp1 = g + 1.0
+        sin2 = (gp1 * m2 - 4.0 + math.sqrt(gp1 * (gp1 * m2 * m2 + 8.0 * (g - 1.0) * m2 + 16.0))
+                ) / (4.0 * g * m2)
+        if beta > math.asin(math.sqrt(min(sin2, 1.0))):
+            return None                              # strong branch
+        tan_t = 2.0 / math.tan(beta) * (m2 * math.sin(beta) ** 2 - 1.0) / \
+            (m2 * (g + math.cos(2.0 * beta)) + 2.0)
+        theta = math.atan(tan_t)
+        mn2 = math.sqrt((1.0 + 0.5 * (g - 1.0) * Mn * Mn) / (g * Mn * Mn - 0.5 * (g - 1.0)))
+        M = mn2 / math.sin(beta - theta)
+        angles.append(math.degrees(theta))
+    recovery = _normal_p0(Mn, g) ** n_ramps * (_normal_p0(M, g) if M > 1.0 else 1.0)
+    return angles, M, recovery
+
+
+def fast_recovery(M_inf, n_ramps, Mn, gamma=1.4):
+    r = _chain(M_inf, n_ramps, Mn, gamma)
+    return 0.0 if r is None else r[2]
+
+
+def fast_turning(M_inf, n_ramps, Mn, gamma=1.4):
+    r = _chain(M_inf, n_ramps, Mn, gamma)
+    return None if r is None else sum(r[0])
+
+
+def _result(M_inf, n_ramps, Mn, gamma, constrained):
+    ramps = equal_strength_ramps(M_inf, n_ramps, Mn, gamma)
+    states = inlet.compress(M_inf, ramps, gamma)
+    return {"ramps": ramps, "Mn": float(Mn), "recovery": states[-1].p0_ratio,
+            "states": states, "constrained": constrained}
+
+
+def constrained_optimum(M_inf, n_ramps, gamma, max_turn_deg, unconstrained):
+    """The cowl-constrained optimum of optimize_equal_strength (sum(theta) = max_turn_deg,
+    brentq on Mn below the unconstrained Mn), with the root found on the fast chain."""
+    if max_turn_deg >= sum(unconstrained["ramps"]):
+        return dict(unconstrained, constrained=False)
+    Mn = brentq(lambda m: fast_turning(M_inf, n_ramps, m, gamma) - max_turn_deg,
+                1.0 + 1e-9, unconstrained["Mn"], xtol=1e-12)
+    return _result(M_inf, n_ramps, Mn, gamma, True)

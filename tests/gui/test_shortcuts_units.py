@@ -13,8 +13,10 @@ def test_tabs_and_placeholders(window):
     assert [window.tabs.tabText(i) for i in range(4)] == ["Design", "Off-design", "Analytics",
                                                           "Compare"]
     from PySide6.QtWidgets import QLabel
-    labels = [lab.text() for lab in window.analytics_tab.findChildren(QLabel)]
-    assert any("coming in M9" in t for t in labels)
+    labels = [lab.text() for lab in window.compare_tab.findChildren(QLabel)]
+    assert any("coming in M10" in t for t in labels)                  # Compare: placeholder
+    from busemann.views.analytics_tab import AnalyticsTab
+    assert isinstance(window.analytics_tab, AnalyticsTab)            # Analytics: M9a
 
 
 def test_number_keys_switch_tabs_and_letters_trigger_actions(qtbot, window):
