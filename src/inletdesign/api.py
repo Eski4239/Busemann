@@ -910,6 +910,7 @@ COWL_FRONTAL_RANGE = (0.01, 1.0)       # cowl frontal height / h_c
 COWL_DETACHED_REASON = "cowl shock detached: not computable in this model"
 COWL_SUBSONIC_REASON = "subsonic flow at the lip: not computable in this model"
 DRAG_LABEL = "inviscid estimate: pressure drag only, no skin friction"
+NONUNIFORM_NOTE = "pressure on the cowl face not uniform: estimate uses the lip value"
 
 
 @dataclass(frozen=True)
@@ -919,6 +920,8 @@ class CowlDrag(_Serialisable):
     p_ratio: float           # p_c / p_inf on the cowl's outer face (None if not computable)
     turn_deg: float          # turn the outer cowl face imposes (incl. the lip wedge)
     lip_mach: float
+    nonuniform: bool = False  # a shock intersection loads the cowl face (see note)
+    note: str = None          # NONUNIFORM_NOTE when nonuniform, else None
 
 
 @dataclass(frozen=True)
@@ -927,6 +930,7 @@ class DragSweep(_Serialisable):
     cd_add: tuple            # None where the ramp shocks are detached
     cd_cowl: tuple           # None where not computable (see reasons)
     reasons: tuple           # None, or why the cowl drag (or both) is missing
+    notes: tuple = ()        # NONUNIFORM_NOTE where a shock intersection loads the cowl face
 
 
 def _q_h(M, h):
@@ -1063,31 +1067,79 @@ def cowl_pressure_drag(M_inf, lip_mach, lip_p_ratio, turn_deg, frontal_height=0.
     return CowlDrag(float(cd), None, p_c, float(turn_deg), float(lip_mach))
 
 
-def cowl_drag(off, frontal_height=0.10, gamma=1.4):
+def cowl_drag(off, frontal_height=0.10, gamma=1.4, design=None):
     """C_D,cowl of an off-design (or design-Mach) point: the lip's local flow
-    (off.lip_mach, region off.cowl_lip_region) turned by off.cowl_required_turn_deg."""
+    (off.lip_mach, region off.cowl_lip_region) turned by off.cowl_required_turn_deg.
+    With `design`, also flags a non-uniform face pressure (cowl_face_intersections)."""
     lip_p = off.regions[off.cowl_lip_region].p_ratio
-    return cowl_pressure_drag(off.M_inf, off.lip_mach, lip_p, off.cowl_required_turn_deg,
-                              frontal_height, gamma)
+    c = cowl_pressure_drag(off.M_inf, off.lip_mach, lip_p, off.cowl_required_turn_deg,
+                           frontal_height, gamma)
+    if design is not None and cowl_face_intersections(design, off, frontal_height):
+        c = dataclasses.replace(c, nonuniform=True, note=NONUNIFORM_NOTE)
+    return c
+
+
+def _line_cross(p, a, q, b):
+    """Intersection of the lines through p (angle a, rad) and q (angle b), or None."""
+    d1 = (math.cos(a), math.sin(a))
+    d2 = (math.cos(b), math.sin(b))
+    den = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(den) < 1e-14:
+        return None
+    t = ((q[0] - p[0]) * d2[1] - (q[1] - p[1]) * d2[0]) / den
+    return (p[0] + t * d1[0], p[1] + t * d1[1])
+
+
+def cowl_face_intersections(design_result, off, frontal_height=0.10):
+    """Ramp-shock intersections that load the cowl's outer face: ((x, y), i, j) for shocks i
+    and j (0-based) that both cross the cowl line ahead of the lip (only those continue
+    above it), intersecting at y_lip < y <= y_lip + frontal_height * h_c and upstream of
+    the cowl face, x <= x_lip + (y - y_lip) / tan(cowl angle). Merged shocks are
+    approximated by the straight extensions of the ramp shocks (merged-shock regime not
+    modelled). Empty at and above the design Mach."""
+    _check_off(design_result, off)
+    _check_frontal(frontal_height)
+    h = design_result.inputs.capture_height
+    pts = design_result.geometry.ramp_points
+    x_lip, y_lip = design_result.geometry.lip
+    phis = design_result.flow_angles_deg
+    tan_cowl = math.tan(math.radians(off.cowl_angle_deg))
+    crossed = [i for i, dx in enumerate(off.dx_over_hc) if dx < -1e-9]
+    lines = {i: (pts[i], math.radians(phis[i] + off.betas_deg[i])) for i in crossed}
+    out = []
+    for a, i in enumerate(crossed):
+        for j in crossed[a + 1:]:
+            P = _line_cross(*lines[i], *lines[j])
+            if P is None:
+                continue
+            rise = P[1] - y_lip
+            if not 1e-9 * h < rise <= frontal_height * h:
+                continue
+            if tan_cowl > 0.0 and P[0] > x_lip + rise / tan_cowl:
+                continue                                  # behind the cowl's outer face
+            out.append(((float(P[0]), float(P[1])), i, j))
+    return tuple(out)
 
 
 def drag_sweep(design_result, sweep, frontal_height=0.10):
     """C_D,add and C_D,cowl at every point of an off-design sweep (None where detached)."""
     _check_frontal(frontal_height)
     gamma = design_result.inputs.gamma
-    add, cowl, reasons = [], [], []
+    add, cowl, reasons, notes = [], [], [], []
     for point in sweep.points:
         if point is None:
             add.append(None)
             cowl.append(None)
             reasons.append("ramp shock detached")
+            notes.append(None)
             continue
         add.append(additive_drag(design_result, point))
-        c = cowl_drag(point, frontal_height, gamma)
+        c = cowl_drag(point, frontal_height, gamma, design=design_result)
         cowl.append(c.cd)
         reasons.append(c.reason)
+        notes.append(c.note)
     return DragSweep(machs=tuple(sweep.machs), cd_add=tuple(add), cd_cowl=tuple(cowl),
-                     reasons=tuple(reasons))
+                     reasons=tuple(reasons), notes=tuple(notes))
 
 
 def cowl_drag_vs_turning(M, deltas, gamma=1.4, wedge=0.0, frontal_height=0.10):

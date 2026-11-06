@@ -499,6 +499,8 @@ class AnalyticsTab(QWidget):
                                             else f"— ({ds.reasons[i]})"))
             if total[i] is not None:
                 lines.append(f"Sum {total[i]:.4f}")
+            if ds.notes[i]:
+                lines.append(ds.notes[i][:1].upper() + ds.notes[i][1:])
             lines.append(api.DRAG_LABEL)
             return "<br>".join(lines)
 

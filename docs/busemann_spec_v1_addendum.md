@@ -110,6 +110,10 @@ menus or windows, never extra rows on existing panels unless listed here.
      p_c = local p × oblique-shock p2/p1. Not computable (gap, shaded) when the cowl shock is
      detached or the lip flow is subsonic. Δh_cowl = "Cowl frontal height" (Design ▸
      Advanced, fraction of h_c, default 0.10, 0.01–1, display-only: no recompute).
+     When a ramp-shock intersection (or a merged shock, approximated by the straight
+     shock extensions) lies within Δh_cowl above the lip and upstream of the cowl face, the
+     hover, the off-design card and Verification note "pressure on the cowl face not
+     uniform: estimate uses the lip value".
    - Analytics ▸ "Drag (inviscid estimate)": C_D,add, C_D,cowl and their sum vs M∞ with the
      design-Mach line; recovery vs C_D,cowl at the design Mach along the n = 1–4 turning
      curves and the isentropic curve (hover, pick + Apply); computed takeaways.

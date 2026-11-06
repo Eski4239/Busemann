@@ -97,6 +97,12 @@ class OffDesignCard(QFrame):
                 grid.addWidget(delta, r, 2)
             self.values[key], self.deltas[key] = value, delta
         grid.setColumnStretch(1, 1)
+        self.drag_note = QLabel("")                   # non-uniform cowl-face pressure (M9b)
+        self.drag_note.setObjectName("muted")
+        self.drag_note.setWordWrap(True)
+        self.drag_note.setToolTip(tip("offcard.cd_cowl"))
+        self.drag_note.hide()
+        grid.addWidget(self.drag_note, len(self.ROWS) + 2, 0, 1, 3)
         self.chip = QLabel()                          # surplus / shortfall chip, own row
         self.chip.setObjectName("supplyChip")
         self.chip.setToolTip(tip("offcard.chip"))
@@ -132,6 +138,7 @@ class OffDesignCard(QFrame):
             self.deltas[key].setText(delta)
 
         if design is None or off is None:
+            self.drag_note.hide()
             for key, *_ in self.ROWS:
                 put(key, EMPTY)
             self.values["regime"].setText(REGIMES[regime][0] if regime in REGIMES else EMPTY)
@@ -156,6 +163,7 @@ class OffDesignCard(QFrame):
         """Inviscid pressure-drag coefficients at the slider Mach (M9b), Δ vs the design."""
         from inletdesign import api
 
+        self.drag_note.hide()
         if not design.inputs.n_ramps:
             for key in ("cd_add", "cd_cowl"):
                 self.values[key].setText(EMPTY)
@@ -164,7 +172,7 @@ class OffDesignCard(QFrame):
         add = api.additive_drag(design, off)
         self.values["cd_add"].setText(f"{add:.4f}")
         self.deltas["cd_add"].setText(f"{add:+.4f}")          # 0 at the design point
-        cowl = api.cowl_drag(off, frontal_height, design.inputs.gamma)
+        cowl = api.cowl_drag(off, frontal_height, design.inputs.gamma, design=design)
         at_design = api.cowl_pressure_drag(
             design.inputs.M, design.inputs.M, 1.0,
             design.cowl_angle_deg + design.inputs.cowl_wedge_deg, frontal_height,
@@ -178,7 +186,11 @@ class OffDesignCard(QFrame):
             self.values["cd_cowl"].setText(f"{cowl.cd:.4f}")
             self.deltas["cd_cowl"].setText("" if at_design is None else
                                            f"{cowl.cd - at_design:+.4f}")
-            self.values["cd_cowl"].setToolTip(base)
+            self.values["cd_cowl"].setToolTip(base if not cowl.note else
+                                              f"{base}\n{cowl.note[:1].upper()}{cowl.note[1:]}.")
+            if cowl.note:
+                self.drag_note.setText(f"{cowl.note[:1].upper()}{cowl.note[1:]}.")
+                self.drag_note.show()
 
     def text(self, key):
         return self.values[key].text()

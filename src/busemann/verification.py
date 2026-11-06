@@ -183,6 +183,19 @@ def items(design, inputs, fs=None, off=None, off_fs=None):
         DRAG_SOURCE,
         _cfd("It excludes skin friction, subcritical spillage (terminal shock expelled), the "
              "cowl beyond its frontal height and 3D effects")))
+    if off is not None and design.inputs.n_ramps:
+        h = getattr(inputs, "cowl_frontal_height", 0.10)
+        hits = api.cowl_face_intersections(design, off, h)
+        if hits:
+            rise = max(p[1] for p, _, _ in hits) - design.geometry.lip[1]
+            out.append(VerificationItem(
+                "info", "drag", f"Cowl drag: non-uniform face pressure at M∞ {off.M_inf:.2f}",
+                f"{len(hits)} ramp-shock intersection(s) within the cowl frontal height "
+                f"({h:.2f} × capture height) above the lip, the highest "
+                f"{rise / design.inputs.capture_height:.3f} × capture height above it; merged "
+                "shocks approximated by the straight ramp-shock extensions",
+                "Busemann model limit (geometric check, no published criterion cited)",
+                _cfd(api.NONUNIFORM_NOTE[:1].upper() + api.NONUNIFORM_NOTE[1:])))
     # other model notices of the design point (subsonic duct, cowl angle limit, ...)
     covered = ("External cowl shock", "Cowl near shock detachment", "real-gas")
     notices = [(n, "design point") for n in design.notices]

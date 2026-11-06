@@ -133,3 +133,72 @@ def test_results_serialise():
     ds = api.drag_sweep(d, api.off_design_sweep(d, 2.5, 3.5, 5))
     json.dumps(ds.to_dict())
     assert all(math.isfinite(v) for v in ds.cd_add)
+
+
+# --- non-uniform cowl-face pressure (a shock intersection within the frontal height) -------
+def _on_line(point, origin, angle_deg):
+    a = math.radians(angle_deg)
+    return abs(math.cos(a) * (point[1] - origin[1]) - math.sin(a) * (point[0] - origin[0]))
+
+
+def test_validation_design_at_2_55_has_a_shock_intersection_on_the_cowl_face():
+    d = api.design(3.0, 2)
+    off = api.off_design_point(d, 2.55)
+    h = d.inputs.capture_height
+    hits = api.cowl_face_intersections(d, off, 0.10)
+    assert len(hits) == 1
+    (x, y), i, j = hits[0]
+    assert (i, j) == (0, 1)
+    rise = (y - d.geometry.lip[1]) / h
+    assert 0.0 < rise <= 0.10 and rise == pytest.approx(0.097, abs=5e-4)
+    for k in (i, j):                    # geometric self-consistency: on both shock lines
+        origin = d.geometry.ramp_points[k]
+        assert _on_line((x, y), origin, d.flow_angles_deg[k] + off.betas_deg[k]) < 1e-12
+    c = api.cowl_drag(off, 0.10, design=d)
+    assert c.nonuniform and c.note == api.NONUNIFORM_NOTE
+    assert c.cd == api.cowl_drag(off, 0.10).cd                 # the value itself unchanged
+    assert not api.cowl_drag(off, 0.10).nonuniform             # no design: not checked
+
+
+def test_no_cowl_face_note_with_a_smaller_frontal_height_or_at_and_above_design():
+    d = api.design(3.0, 2)
+    assert api.cowl_face_intersections(d, api.off_design_point(d, 2.55), 0.05) == ()
+    for M in (3.0, 3.25):
+        off = api.off_design_point(d, M)
+        assert api.cowl_face_intersections(d, off, 1.0) == ()
+        assert not api.cowl_drag(off, 1.0, design=d).nonuniform
+
+
+def test_intersections_behind_the_cowl_face_do_not_count():
+    """3 ramps at M 2.7: shocks 1-2 meet 0.110 h_c above and 0.008 h_c downstream of the lip.
+    With the cowl at 39.6° the face at that height is 0.133 h_c downstream, so the point is
+    upstream of it and counts at Δh 0.2; with a near-vertical cowl face (constructed) it lies
+    behind the face and is excluded."""
+    d = api.design(3.0, 3)
+    off = api.off_design_point(d, 2.7)
+    h = d.inputs.capture_height
+    hits = {(i, j): p for p, i, j in api.cowl_face_intersections(d, off, 0.2)}
+    assert (0, 1) in hits and hits[(0, 1)][0] > d.geometry.lip[0]      # downstream of the lip
+    x_lip, y_lip = d.geometry.lip
+    tan_c = math.tan(math.radians(off.cowl_angle_deg))
+    for (x, y) in hits.values():
+        assert x <= x_lip + (y - y_lip) / tan_c + 1e-12
+    # move the cowl face upstream (a steep cowl, constructed): the downstream point drops out
+    import dataclasses
+    steep = dataclasses.replace(off, cowl_angle_deg=89.9)
+    kept = {(i, j) for _, i, j in api.cowl_face_intersections(d, steep, 0.2)}
+    behind = [k for k, (x, y) in hits.items() if x > x_lip + (y - y_lip) / math.tan(
+        math.radians(89.9))]
+    assert (0, 1) in behind and not set(behind) & kept
+    assert (hits[(0, 1)][1] - d.geometry.lip[1]) / h == pytest.approx(0.110, abs=5e-4)
+
+
+def test_drag_sweep_notes_match_the_point_calls():
+    d = api.design(3.0, 2)
+    sweep = api.off_design_sweep(d, 2.4, 3.6, 25)
+    ds = api.drag_sweep(d, sweep, 0.10)
+    assert len(ds.notes) == len(ds.machs)
+    for point, note in zip(sweep.points, ds.notes):
+        expected = api.cowl_drag(point, 0.10, design=d).note if point is not None else None
+        assert note == expected
+    assert any(ds.notes) and not any(n for M, n in zip(ds.machs, ds.notes) if M >= 3.0)

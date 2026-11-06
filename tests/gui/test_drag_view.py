@@ -172,3 +172,45 @@ def test_drag_text_has_no_raw_symbols():
              api.DRAG_LABEL]
     problems = [v for t in texts for v in mod._violations("drag", re.sub("<[^>]+>", "", t))]
     assert problems == [] and not any("_" in t for t in texts)
+
+
+def test_nonuniform_cowl_face_note_in_card_hover_and_verification(qtbot, window, tmp_path):
+    """Validation design at M 2.55: the ramp shocks meet 0.097 h_c above the lip, inside the
+    default cowl frontal height (0.10)."""
+    note = api.NONUNIFORM_NOTE[:1].upper() + api.NONUNIFORM_NOTE[1:]
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    with qtbot.waitSignal(window.state.off_design_ready, timeout=5000):
+        window.state.update(off_design_mach=2.55)
+    card = window.offdesign_tab.card
+    assert card.drag_note.isVisibleTo(card) and card.drag_note.text() == note + "."
+    assert note in card.values["cd_cowl"].toolTip()
+    items = window.state.verification_items()
+    face = [i for i in items if i.title.startswith("Cowl drag: non-uniform face pressure")]
+    assert len(face) == 1 and "M∞ 2.55" in face[0].title and note in face[0].text
+    from busemann.export import notes as N
+    from busemann.export.metadata import metadata
+    assert face[0].title in N.render(metadata(window.state.inputs, "geometry DXF"), items)
+    # the drag-vs-M∞ hover carries it where it applies
+    tab = window.analytics_tab
+    with qtbot.waitSignal(tab.computed, timeout=10000):
+        window.tabs.setCurrentWidget(tab)
+    tab.set_view("drag")
+    ds = api.drag_sweep(window.state.design, window.state.sweep, 0.10)
+    k = next(i for i, n in enumerate(ds.notes) if n)
+    chart = tab.drag_chart
+    text = chart.series["add"]["text"](k)
+    assert note in text
+    clear = next(i for i, n in enumerate(ds.notes) if not n and ds.cd_cowl[i] is not None)
+    assert note not in chart.series["add"]["text"](clear)
+    # at the design Mach: no note anywhere
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    with qtbot.waitSignal(window.state.off_design_ready, timeout=5000):
+        window.state.update(off_design_mach=3.0)
+    assert not card.drag_note.isVisibleTo(card)
+    assert not [i for i in window.state.verification_items()
+                if i.title.startswith("Cowl drag: non-uniform")]
+    # a smaller frontal height clears it at M 2.55 too
+    window.state.update(cowl_frontal_height=0.05)
+    with qtbot.waitSignal(window.state.off_design_ready, timeout=5000):
+        window.state.update(off_design_mach=2.55)
+    assert not card.drag_note.isVisibleTo(card)
