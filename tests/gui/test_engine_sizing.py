@@ -9,6 +9,11 @@ from inletdesign import api  # noqa: E402
 pytestmark = pytest.mark.gui
 
 
+def _plain(text):
+    """Legend text with non-breaking spaces and hyphens made ordinary."""
+    return text.replace("\u00a0", " ").replace("\u2011", "-")
+
+
 def _wait(qtbot, window, **changes):
     with qtbot.waitSignal(window.state.design_ready, timeout=5000):
         window.state.update(**changes)
@@ -50,14 +55,44 @@ def test_mass_flow_drives_the_capture_height(qtbot, window):
     assert s.design.inputs.capture_height == pytest.approx(0.2, rel=1e-10)
 
 
-def test_results_show_per_metre_and_total(qtbot, window):
+def test_mass_flow_card_shows_total_with_a_width(qtbot, window):
+    """M8.2 follow-up: with a width the main value is total ṁ (kg/s), kg/s/m the subtitle;
+    without a width the card shows kg/s/m only."""
+    from inletdesign import units as U
+
     card = window.results_panel.cards["mass_flow"]
-    assert not card.sub_label.isVisibleTo(card)          # no width: per metre only
+    per_m = window.state.captured_mass_flow()
+    assert card.unit_label.text() == "kg/s/m" and not card.sub_label.isVisibleTo(card)
+    assert card.text() == f"{per_m:.4g}" or float(card.text()) == pytest.approx(per_m, rel=1e-3)
     _wait(qtbot, window, inlet_width_m=0.5)
     total = window.state.total_mass_flow()
-    assert total == pytest.approx(0.5 * window.state.captured_mass_flow(), rel=1e-15)
-    sub = card.sub_label.text()
-    assert sub.startswith("total ") and "through 0.5000 m" in sub
+    assert total == pytest.approx(0.5 * per_m, rel=1e-15)
+    assert card.unit_label.text() == "kg/s"
+    assert float(card.text()) == pytest.approx(total, rel=1e-3)
+    assert card.sub_label.text().startswith(f"{float(card.sub_label.text().split()[0]):.4g}")
+    assert "kg/s/m" in card.sub_label.text() and "width 0.5" in card.sub_label.text()
+    window.state.update(units="Imperial")
+    assert card.unit_label.text() == "lb/s"
+    assert float(card.text()) == pytest.approx(total / U.LBM, rel=1e-3)
+    assert "lbm/s/ft" in card.sub_label.text()
+
+
+def test_locked_mdot_says_set_a_width_first(qtbot, window):
+    from busemann.views.design_panel import NO_WIDTH_TEXT
+
+    field = window.design_panel.mdot
+    assert NO_WIDTH_TEXT == "set a width first"
+    assert field.is_locked() and field.edit.text() == ""
+    assert field._placeholder == NO_WIDTH_TEXT
+    shown = field.edit.placeholderText()
+    if field.placeholder_fits():
+        assert shown == NO_WIDTH_TEXT
+    else:                                            # elided, full text in the tooltip
+        assert shown.endswith("…")
+    assert NO_WIDTH_TEXT in field.edit.toolTip()
+    window.resize(1280, 800)
+    qtbot.wait(50)
+    assert NO_WIDTH_TEXT in field.edit.toolTip()
 
 
 def test_off_design_supply_demand_chip_and_demand_line(qtbot, window):
@@ -78,7 +113,7 @@ def test_off_design_supply_demand_chip_and_demand_line(qtbot, window):
     assert len(xs) == len(s.sweep.machs)
     # same altitude, so rho V ~ M: the demand ratio at M is (design M) / M (1 at design)
     assert ys[k] == pytest.approx(3.0 / xs[k], rel=1e-9)
-    footer = tab.charts.note_legend.text().replace("\u00a0", " ")
+    footer = _plain(tab.charts.note_legend.text())
     assert "fixed demand (engine matching not modelled)" in footer
 
 
@@ -95,21 +130,23 @@ def test_mil_kpi_and_diffuser(qtbot, window):
     face = d.recovery_total * 0.97
     mil = api.mil_recovery(3.0)
     assert card.text() == f"{d.recovery_total:.4f}"           # the value stays inviscid
-    assert card.note("engine_face") == f"engine face ≈ {face:.4f} (× 0.970 diffuser, estimate)"
+    # M8.2 follow-up: one neutral line, the comparison in words in its tooltip
+    assert list(card.notes) == ["mil"]
+    assert card.note("mil") == f"Engine face ≈ {face:.3f} · MIL-E-5008B {mil:.3f}"
+    assert card.notes["mil"].property("level") == "muted"         # red only for errors
     pct = 100 * (face / mil - 1)
-    assert card.note("mil") == \
-        f"Engine-face estimate {abs(pct):.1f} % below MIL-E-5008B ({mil:.4f})"
-    assert card.notes["mil"].property("level") == "error"
+    assert f"{abs(pct):.1f} % below MIL-E-5008B" in card.notes["mil"].toolTip()
+    assert not card.sub_label.isVisibleTo(card)                    # no subtitle
     _wait(qtbot, window, diffuser_recovery=1.0)
     assert card.text() == f"{d.recovery_total:.4f}"
-    assert "× 1.000" in card.note("engine_face")
+    assert card.note("mil").startswith(f"Engine face ≈ {d.recovery_total:.3f}")
     charts = window.offdesign_tab.charts
     xs, ys = charts.curves["mil"].getData()
     assert ys[0] == pytest.approx(api.mil_recovery(xs[0]), rel=1e-15)
     fx, fy = charts.curves["rec_face"].getData()
     tx, ty = charts.curves["rec_tot"].getData()
     assert fy[0] == pytest.approx(ty[0] * 1.0)
-    legend = charts.note_legend.text().replace(" ", " ")
+    legend = _plain(charts.note_legend.text())
     assert "MIL-E-5008B — compare with the engine-face estimate" in legend
     assert "diffuser 1.000" in legend
 
@@ -121,9 +158,23 @@ def test_gap_and_sensitivity_column_custom_only(qtbot, window):
     _wait(qtbot, window, method="custom", custom_angles=(9.0, 10.0))
     d = window.state.design
     gap, _ = api.optimum_gap(d)
-    assert card.note("gap") == f"Recovery {gap:.1f} % below the Oswatitsch optimum for 2 ramps"
+    assert card.note("gap") == f"Gap to optimum {gap:.1f} %"
+    assert list(card.notes) == ["mil", "gap"] and card.notes["gap"].property("level") == "muted"
+    assert "below the Oswatitsch optimum for 2 ramps" in card.notes["gap"].toolTip()
     assert table.sensitivity_visible()
     sens = api.recovery_sensitivity(d)
     assert [table.text(r, 4) for r in range(2)] == [f"{v:+.4f}" for v in sens]
     _wait(qtbot, window, method="oswatitsch")
     assert not table.sensitivity_visible() and card.note("gap") is None
+
+
+def test_cowl_margin_card_is_quiet_unless_detached(qtbot, window):
+    card = window.results_panel.cards["cowl_margin"]
+    d = window.state.design
+    assert d.cowl_margin_deg > 0                                   # near, but attached
+    assert card.text() == f"{d.cowl_margin_deg:+.2f}" and card.notes == {}
+    assert card.sub_label.text() == "θmax(M∞) − cowl turn"
+    _wait(qtbot, window, cowl_wedge_deg=6.0)                       # now detached
+    assert window.state.design.cowl_margin_deg < 0
+    assert card.note("margin_state") == "cowl shock detached"
+    assert card.notes["margin_state"].property("level") == "error"

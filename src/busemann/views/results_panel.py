@@ -31,26 +31,25 @@ TITLE_MAX = 56
 
 
 def recovery_notes(recovery, M, diffuser):
-    """KPI lines for the recovery card: engine-face estimate and the MIL-E-5008B comparison
-    (the MIL line applies to the engine face, not to the inviscid value)."""
+    """One neutral line for the recovery card: the engine-face estimate (inviscid recovery
+    × diffuser) and the MIL-E-5008B value it is compared with. The comparison in words is in
+    the tooltip; no colour (red is only for errors)."""
     face = recovery * diffuser
     mil = api.mil_recovery(M)
     pct = 100.0 * (face / mil - 1.0)
     side = "above" if pct >= 0 else "below"
-    return [
-        ("engine_face", f"engine face ≈ {face:.4f} (× {diffuser:.3f} diffuser, estimate)",
-         None, tip("kpi.engine_face")),
-        ("mil", f"Engine-face estimate {abs(pct):.1f} % {side} MIL-E-5008B ({mil:.4f})",
-         "ok" if pct >= 0 else "error", tip("kpi.mil")),
-    ]
+    tooltip = (f"{tip('kpi.engine_face')}\n{tip('kpi.mil')}\nEngine-face estimate "
+               f"{face:.4f} is {abs(pct):.1f} % {side} MIL-E-5008B ({mil:.4f}).")
+    return [("mil", f"Engine face ≈ {face:.3f} · MIL-E-5008B {mil:.3f}", None, tooltip)]
 
 
 def gap_note(gap_pct, n_ramps):
-    """'Recovery 1.3 % below the Oswatitsch optimum for 2 ramps'."""
+    """'Gap to optimum 1.3 %' (custom angles only): recovery below the Oswatitsch optimum."""
     ramps = f"{n_ramps} ramp" + ("s" if n_ramps != 1 else "")
     side = "below" if gap_pct >= 0 else "above"
-    return ("gap", f"Recovery {abs(gap_pct):.1f} % {side} the Oswatitsch optimum for {ramps}",
-            None, tip("kpi.gap"))
+    return ("gap", f"Gap to optimum {gap_pct:.1f} %", None,
+            f"{tip('kpi.gap')}\nRecovery {abs(gap_pct):.1f} % {side} the Oswatitsch optimum "
+            f"for {ramps}.")
 
 
 def warning_title(text):
@@ -190,8 +189,8 @@ class ResultsPanel(QWidget):
         self.banner.hide()
 
         self.cards = {
-            "recovery_total": KpiCard("Total pressure recovery", "kpi.recovery_total",
-                                      compact=True),
+            # the headline number: full-size value (the other cards are compact)
+            "recovery_total": KpiCard("Total pressure recovery", "kpi.recovery_total"),
             "mass_capture": KpiCard("Mass capture", "kpi.mass_capture", compact=True),
             "mass_flow": KpiCard("Captured mass flow", "kpi.mass_flow", compact=True),
             "M_duct": KpiCard("M after terminal shock", "kpi.M_duct", compact=True),
@@ -291,20 +290,36 @@ class ResultsPanel(QWidget):
         if mdot is None:
             card.clear()
             return
-        card.set_value(fmt.sig(_units.to_display(mdot, "mass_flow_per_span", system), 4),
-                       _units.unit_label("mass_flow_per_span", system),
-                       None if total is None else
-                       _total_text(total, self.state.inputs.inlet_width_m, system))
+        per_m = (f"{fmt.sig(_units.to_display(mdot, 'mass_flow_per_span', system), 4)} "
+                 f"{_units.unit_label('mass_flow_per_span', system)}")
+        if total is None:                    # no width: per metre of span only
+            card.set_value(fmt.sig(_units.to_display(mdot, "mass_flow_per_span", system), 4),
+                           _units.unit_label("mass_flow_per_span", system))
+            return
+        w = _units.to_display(self.state.inputs.inlet_width_m, "length", system)
+        card.set_value(fmt.sig(_units.to_display(total, "mass_flow", system), 4),
+                       _units.unit_label("mass_flow", system),
+                       f"{per_m} · width {fmt.sig(w, 4)} {_units.unit_label('length', system)}")
 
     def _margin_card(self, margin, sub):
+        """Big value, one neutral line; red text only when the cowl shock is detached."""
         card = self.cards["cowl_margin"]
         if margin is None:
             card.set_value("—", "°", "subsonic flow at the lip: no cowl shock")
+            card.set_notes([])
             return
         card.set_value(f"{margin:+.2f}", "°", sub)
-        card.set_notes([("margin_state", "cowl shock detached" if margin < 0 else
-                         "close to detachment" if margin < 2.0 else "attached",
-                         "error" if margin < 0 else None, tip("kpi.cowl_margin"))])
+        card.set_notes([("margin_state", "cowl shock detached", "error",
+                         tip("kpi.cowl_margin"))] if margin < 0 else [])
+
+    def _recovery_tip(self, has_terminal):
+        """The recovery card's value tooltip says whether the terminal shock is included."""
+        card = self.cards["recovery_total"]
+        what = ("Includes the terminal normal shock." if has_terminal
+                else "No terminal shock: the flow is subsonic behind the last ramp shock.")
+        text = f"{tip('kpi.recovery_total')}\n{what}"
+        card.setToolTip(text)                    # card and value share the tooltip
+        card.value_label.setToolTip(text)
 
     def _show_off_design(self):
         """KPIs of the frozen design at the slider Mach."""
@@ -320,9 +335,8 @@ class ResultsPanel(QWidget):
             return
         has_terminal = any(s.kind == "normal" for s in off.shock_states)
         cards = self.cards
-        cards["recovery_total"].set_value(
-            f"{off.recovery_total:.4f}", "p0/p0∞",
-            "incl. terminal normal shock" if has_terminal else "no terminal shock (subsonic)")
+        cards["recovery_total"].set_value(f"{off.recovery_total:.4f}", "p0/p0∞")
+        self._recovery_tip(has_terminal)
         cards["recovery_total"].set_badge(None)
         cards["recovery_total"].set_notes(recovery_notes(
             off.recovery_total, off.M_inf, self.state.inputs.diffuser_recovery))
@@ -347,9 +361,8 @@ class ResultsPanel(QWidget):
                 card.clear()
             return
         subsonic = d.M_post_terminal < 1.0 and not any(r.beta_deg == 90.0 for r in d.regions)
-        self.cards["recovery_total"].set_value(
-            f"{d.recovery_total:.4f}", "p0/p0∞",
-            "no terminal shock (subsonic)" if subsonic else "incl. terminal normal shock")
+        self.cards["recovery_total"].set_value(f"{d.recovery_total:.4f}", "p0/p0∞")
+        self._recovery_tip(not subsonic)
         self.cards["recovery_total"].set_badge("constrained" if d.constrained else None)
         self.cards["recovery_total"].badge.setToolTip(
             f"Optimum angles limited to a cowl angle of "

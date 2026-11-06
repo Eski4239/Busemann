@@ -111,6 +111,12 @@ def main():
                  for c, need, have in window.results_panel.station_table.column_overflow()]
     window.state.update(n_ramps=2, method="oswatitsch")
     settle()
+    # the locked ṁ field's "set a width first" either fits or is in its tooltip
+    from busemann.views.design_panel import NO_WIDTH_TEXT
+    field = window.design_panel.mdot
+    if not field.placeholder_fits() and NO_WIDTH_TEXT not in field.edit.toolTip():
+        problems.append({"widget": "NumberField", "name": "mdot placeholder",
+                         "size": [field.edit.width(), 0], "min_hint": [0, 0]})
     if len(sys.argv) > 1:
         window.grab().save(sys.argv[1])
     window.state.shutdown()

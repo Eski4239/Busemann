@@ -34,8 +34,9 @@ def test_height_mode_width_drives_total_mass_flow(qtbot, window, key):
         _type(qtbot, panel.width_field, "2.5", key)
     per_m = s.captured_mass_flow()
     assert s.inputs.inlet_width_m == 2.5 and s.total_mass_flow() == pytest.approx(2.5 * per_m)
-    assert window.results_panel.cards["mass_flow"].sub_label.text().startswith(
-        f"total {s.total_mass_flow():.4g}"[:10])
+    card = window.results_panel.cards["mass_flow"]
+    assert card.unit_label.text() == "kg/s"                       # total is the main value
+    assert float(card.text()) == pytest.approx(s.total_mass_flow(), rel=1e-3)
     assert float(panel.mdot.edit.text()) == pytest.approx(2.5 * per_m, abs=1e-3)   # locked ṁ
     window.tabs.setCurrentWidget(window.offdesign_tab)
     with qtbot.waitSignal(s.off_design_ready, timeout=5000):
@@ -54,8 +55,11 @@ def test_mass_flow_mode_width_rescales_the_capture_height(qtbot, window):
     assert h == pytest.approx(mdot / (s.freestream.rho * s.freestream.V * 4.0), rel=1e-12)
     assert panel.capture.edit.text() == f"{h:.3f}"                  # the locked h_c follows
     assert s.total_mass_flow() == pytest.approx(mdot, rel=1e-12)    # the demand is still met
-    labels = [lab.text() for lab in window.canvas.inlet_scene.dim_labels]
-    assert f"h_c {h * 1000:.1f} mm" in labels, labels                 # the drawing says so
+    def labels():
+        return [lab.text() for lab in window.canvas.inlet_scene.dim_labels]
+
+    # the drawing says so (after the 150 ms transition, labels are placed on the final frame)
+    qtbot.waitUntil(lambda: f"h_c {h * 1000:.1f} mm" in labels(), timeout=2000)
 
 
 def test_width_in_imperial_units(qtbot, window):

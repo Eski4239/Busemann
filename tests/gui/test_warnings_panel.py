@@ -14,8 +14,9 @@ def test_only_the_five_cards(window):
     cards = window.results_panel.cards
     assert cards["M_duct"].title.text() == "M AFTER TERMINAL SHOCK"
     assert cards["cowl_margin"].text() == f"{window.state.design.cowl_margin_deg:+.2f}"
-    assert all(card.property("compact") for card in cards.values())
-    assert cards["recovery_total"].note("mil").startswith("Engine-face estimate")
+    assert not cards["recovery_total"].property("compact")             # big value
+    assert all(card.property("compact") for k, card in cards.items() if k != "recovery_total")
+    assert cards["recovery_total"].note("mil").startswith("Engine face ≈ ")
 
 
 def test_banner_counts_warnings_and_scrolls_to_them(qtbot, window):

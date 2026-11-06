@@ -168,3 +168,79 @@ def test_gui_thread_never_renders_mathtext_during_a_drag(qtbot, window, monkeypa
     slider.setSliderDown(False)
     assert not window.state.dragging and not drawer._pending
     assert drawer.rendered.title == "Cowl lip at M∞ 2.89"
+
+
+def test_popup_text_as_displayed_has_no_raw_symbols(qtbot, window):
+    """M8.2 follow-up: audit the exact plain text the popup shows (sources included) for
+    every topic of the tree, with the forbidden-token list of tests/test_text_audit.py."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "text_audit", Path(__file__).parents[1] / "test_text_audit.py")
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+
+    drawer = _open(qtbot, window)
+    problems = []
+    for key in drawer.topic_keys():
+        if key[0] == "group":
+            continue
+        with qtbot.waitSignal(drawer.content_changed, timeout=3000):
+            _click(drawer, key)
+        shown = drawer.popup.title.text() + "\n" + drawer.body.toPlainText()
+        problems += audit._violations(f"popup {key}", shown)
+    assert problems == []
+    with qtbot.waitSignal(drawer.content_changed, timeout=3000):
+        _click(drawer, ("item", "shock", 0))
+    shown = drawer.body.toPlainText()
+    assert "M₁ sin β" in shown and "M₂ sin(β − θ)" in shown and "sin(beta" not in shown
+
+
+@pytest.mark.parametrize("kind, index", [("region", 0), ("region", 3), ("shock", 0),
+                                         ("shock", 2), ("cowl", 0)])
+def test_popup_never_covers_the_selected_canvas_item(qtbot, window, kind, index):
+    from PySide6.QtCore import QRect
+
+    window.resize(1440, 900)
+    drawer = _open(qtbot, window)
+    window.canvas.select(kind, index)
+    with qtbot.waitSignal(drawer.content_changed, timeout=3000):
+        _click(drawer, (("item", kind, index) if kind != "cowl" else ("item", "cowl", 0)))
+    item = window.canvas.selection_screen_rect()
+    popup = QRect(drawer.popup.pos(), drawer.popup.size())
+    tree = QRect(drawer.mapToGlobal(drawer.rect().topLeft()), drawer.size())
+    assert item is not None and not popup.intersects(item), (popup, item)
+    assert not popup.intersects(tree)
+
+
+def test_popup_is_a_movable_token_styled_tool_window(qtbot, window):
+    from PySide6.QtCore import Qt
+
+    drawer = _open(qtbot, window)
+    with qtbot.waitSignal(drawer.content_changed, timeout=3000):
+        _click(drawer, ("topic", "method", None))
+    popup = drawer.popup
+    assert popup.windowFlags() & Qt.WindowType.Tool and not popup.isModal()
+    assert popup.objectName() == "explainPopup"
+    bg = popup.palette().color(popup.backgroundRole()).name()
+    from busemann.theme import tokens
+    assert popup.grab().toImage().pixelColor(3, popup.height() // 2).name() == \
+        tokens.COLORS["surface"].lower() or bg == tokens.COLORS["surface"].lower()
+
+
+def test_topic_tree_style(qtbot, window):
+    drawer = _open(qtbot, window)
+    qtbot.wait(50)
+    tree = drawer.tree
+    item = drawer._items[("item", "region", 0)]
+    assert tree.visualItemRect(item).height() == 28
+    from PySide6.QtGui import QFontInfo
+    from PySide6.QtWidgets import QApplication
+
+    from busemann.theme import qt as theme
+
+    info = QFontInfo(tree.font())
+    assert info.pixelSize() == 13 and info.family() == theme.ui_family()
+    sheet = QApplication.instance().styleSheet()
+    assert "chevron-right-muted.svg" in sheet and "#explainTree::item" in sheet

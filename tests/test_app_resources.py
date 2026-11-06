@@ -17,8 +17,9 @@ def test_chevron_resolves_to_existing_file():
     assert path.parent.parent == paths.resource_root()
 
 
-def test_pretinted_chevron_matches_token():
-    svg = paths.resource_path("icons", "chevron-down-muted.svg").read_text(encoding="utf-8")
+@pytest.mark.parametrize("name", ["chevron-down-muted.svg", "chevron-right-muted.svg"])
+def test_pretinted_chevron_matches_token(name):
+    svg = paths.resource_path("icons", name).read_text(encoding="utf-8")
     assert f'stroke="{tokens.COLORS["text_muted"]}"' in svg
     assert "currentColor" not in svg
 

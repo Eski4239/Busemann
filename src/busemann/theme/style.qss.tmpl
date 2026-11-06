@@ -406,3 +406,78 @@ QTabBar#mainTabs::tab { padding: 6px ${s2}px; }
 }
 #exportButton:hover { background: $bg; }
 #exportButton::menu-indicator { subcontrol-position: right center; right: ${s1}px; }
+
+/* --- every top-level window uses the tokens (M8.2 follow-up) ---------------- */
+QDialog, QMessageBox, QInputDialog { background: $bg; }
+#aboutDialog, #explainPopup { background: $surface; }
+QDialog QScrollArea, QDialog QScrollArea > QWidget > QWidget { background: $surface; }
+QTextBrowser {
+    background: $surface;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    selection-background-color: $accent;
+}
+QListWidget, QTableWidget {
+    background: $surface;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    selection-background-color: $bg;
+    selection-color: $accent;
+}
+QHeaderView::section {
+    background: $surface;
+    color: $text_muted;
+    border: none;
+    border-bottom: ${border_w}px solid $border;
+    padding: 4px ${s1}px;
+}
+QPushButton {
+    background: $surface;
+    color: $text;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    padding: 5px ${s2}px;
+}
+QPushButton:hover { border-color: $accent; }
+QPushButton:pressed { background: $bg; }
+QPushButton:default { border-color: $accent; }
+QPushButton:disabled { color: $text_muted; }
+QCheckBox { spacing: ${s1}px; }
+QCheckBox::indicator {
+    width: 14px; height: 14px;
+    border: ${border_w}px solid $text_muted;
+    border-radius: 3px;
+    background: $surface;
+}
+QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
+
+/* --- Explain topic tree ------------------------------------------------------------ */
+#explainTree {
+    background: $surface;
+    border: none;
+    outline: 0;
+    font-size: ${size_base}px;
+    show-decoration-selected: 1;
+}
+#explainTree::item {
+    height: 28px;
+    color: $text;
+    border-left: 2px solid transparent;
+    padding-left: 4px;
+}
+#explainTree::item:hover { background: $bg; }
+#explainTree::item:selected {
+    background: $bg;
+    color: $accent;
+    border-left: 2px solid $accent;
+}
+#explainTree::branch { background: $surface; }
+#explainTree::branch:hover, #explainTree::branch:selected { background: $bg; }
+#explainTree::branch:has-children:!has-siblings:closed,
+#explainTree::branch:closed:has-children:has-siblings {
+    image: url("$chevron_right");
+}
+#explainTree::branch:open:has-children:!has-siblings,
+#explainTree::branch:open:has-children:has-siblings {
+    image: url("$chevron_down");
+}

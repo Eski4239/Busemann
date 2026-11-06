@@ -43,9 +43,14 @@ def _key(token, glyph):
 
 
 def _entry(marker_html, text):
-    """(html, plain text) of one legend entry; its spaces are non-breaking."""
-    glued = text.replace(" ", "\u00a0")
-    return f"{marker_html}&nbsp;{glued}", glued
+    """(html, plain text) of one legend entry that never breaks inside: non-breaking spaces
+    and hyphens (U+2011, "MIL\u2011E\u20115008B"), wrapped in a no-wrap span. A footer row can
+    therefore wrap only between entries."""
+    glued = text.replace(" ", "\u00a0").replace("-", NB_HYPHEN)
+    return (f'<span style="white-space:nowrap">{marker_html}&nbsp;{glued}</span>', glued)
+
+
+NB_HYPHEN = "\u2011"      # non-breaking hyphen (Inter has the glyph; tested)
 
 
 def _swatch(token, alpha):

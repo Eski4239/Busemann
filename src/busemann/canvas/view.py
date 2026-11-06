@@ -299,15 +299,19 @@ class InletCanvas(QGraphicsView):
         return self.inlet_scene.picture is not None and self.inlet_scene.layer_visible("regions")
 
     def continuous_range(self, sk=None):
-        """(lo, hi) of the off-design colour scale: 0.3 to the slider's top (design + 1.5)."""
-        d = self.state.design
-        top = d.inputs.M if d is not None else (sk.mach if sk is not None else 3.0)
-        return tokens.MACH_CONTINUOUS_LO, top + 1.5
+        """(lo, hi) of the off-design colour scale: the lowest region Mach to M∞ of the point
+        shown (it follows the slider)."""
+        sk = sk if sk is not None else self._shown
+        if sk is None:
+            return tokens.MACH_CONTINUOUS_LO, 3.0
+        machs = [r.M for r in sk.regions]
+        lo, hi = min(machs), max(sk.mach, max(machs))
+        return lo, max(hi, lo + 1e-6)
 
     def legend_rect(self):
         vp = self.viewport()
         if self.inlet_scene.continuous_range is not None:
-            h = 36 + _CONT_BAR_H + 12
+            h = 36 + self.continuous_bar_height() + 12
             return QRectF(vp.width() - tokens.LEGEND_INSET_PX - _CONT_LEGEND_W,
                           tokens.LEGEND_INSET_PX, _CONT_LEGEND_W, h)
         rows = max(1, len(self.inlet_scene.mach_edges) - 1)
@@ -386,6 +390,28 @@ class InletCanvas(QGraphicsView):
             return pic.skeleton
         items = pic.regions if kind == "region" else pic.shocks
         return items[index].state if index < len(items) else None
+
+    def selection_screen_rect(self):
+        """Global (screen) rect of the selected item, or None (nothing selected)."""
+        from PySide6.QtCore import QRect
+
+        kind, index = self.selection
+        pic = self.inlet_scene.picture
+        if kind is None or pic is None:
+            return None
+        if kind == "region" and index < len(pic.regions):
+            pts = pic.regions[index].polygon
+        elif kind == "shock" and index < len(pic.shocks):
+            pts = [pic.shocks[index].start, pic.shocks[index].end]
+        elif kind == "cowl":
+            pts = pic.cowl_body
+        else:
+            return None
+        view = [self.viewportTransform().map(S(p)) for p in pts]
+        xs, ys = [p.x() for p in view], [p.y() for p in view]
+        top_left = self.viewport().mapToGlobal(QPointF(min(xs), min(ys)).toPoint())
+        return QRect(top_left.x(), top_left.y(), max(1, round(max(xs) - min(xs))),
+                     max(1, round(max(ys) - min(ys)))).adjusted(-4, -4, 4, 4)
 
     def select(self, kind, index):
         self.selection = (kind, index) if kind is not None else (None, None)
@@ -814,16 +840,27 @@ class InletCanvas(QGraphicsView):
             painter.setPen(QPen(color("text"), 1.5))
             painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
 
+    def continuous_bar_height(self):
+        """Bar height of the continuous legend: 150 px, less when the canvas is short (the
+        card always fits the viewport, so both ends and the sonic line stay visible)."""
+        room = self.viewport().height() - 2 * tokens.LEGEND_INSET_PX - 36 - 12
+        return max(48, min(_CONT_BAR_H, room))
+
     def continuous_ticks(self):
-        """Tick values of the continuous legend (lo, 1, then supersonic steps, hi)."""
+        """Tick values of the continuous legend: both ends, M = 1 when inside, and round
+        values in between."""
         lo, hi = self.inlet_scene.continuous_range
-        step = nice_step((hi - 1.0) / 3.0)
-        ticks = [lo, 1.0]
-        k = 1
-        while 1.0 + k * step < hi - 0.3 * step:
-            ticks.append(round(1.0 + k * step, 6))
+        step = nice_step((hi - lo) / 4.0)
+        ticks = {round(lo, 6), round(hi, 6)}
+        if lo < 1.0 < hi:
+            ticks.add(1.0)
+        k = math.ceil(lo / step)
+        while k * step < hi - 0.35 * step:
+            v = round(k * step, 6)
+            if all(abs(v - t) > 0.35 * step for t in ticks):
+                ticks.add(v)
             k += 1
-        return ticks + [hi]
+        return sorted(ticks)
 
     def _draw_continuous_legend(self, painter):
         lo, hi = self.inlet_scene.continuous_range
@@ -839,19 +876,23 @@ class InletCanvas(QGraphicsView):
                          Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                          CONTINUOUS_LEGEND_TITLE)
         x, bar_w = card.left() + 12, 14
-        top, bottom = card.top() + 36, card.top() + 36 + _CONT_BAR_H
+        bar_h = self.continuous_bar_height()
+        top, bottom = card.top() + 36, card.top() + 36 + bar_h
 
         def y_of(M):                         # linear in M, highest Mach at the top
-            return bottom - (M - lo) / (hi - lo) * _CONT_BAR_H
+            return bottom - (M - lo) / (hi - lo) * bar_h
 
         for py in range(int(top), int(bottom)):
-            M = lo + (bottom - py - 0.5) / _CONT_BAR_H * (hi - lo)
+            M = lo + (bottom - py - 0.5) / bar_h * (hi - lo)
             painter.fillRect(QRectF(x, py, bar_w, 1), QColor(_colors.continuous(M, lo, hi)))
         painter.setPen(QPen(color("border"), 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(QRectF(x, top, bar_w, _CONT_BAR_H))
+        painter.drawRect(QRectF(x, top, bar_w, bar_h))
         painter.setFont(theme.mono_font(tokens.SIZE_LABEL))
-        for M in self.continuous_ticks():
+        ticks = self.continuous_ticks()
+        ends = (ticks[0], ticks[-1])
+        self.legend_tick_labels = []           # labels drawn (tests)
+        for M in ticks:
             y = y_of(M)
             sonic = abs(M - 1.0) < 1e-9
             painter.setPen(QPen(color("text" if sonic else "text_muted"), 1.5 if sonic else 1))
@@ -859,10 +900,14 @@ class InletCanvas(QGraphicsView):
                 painter.drawLine(QPointF(x - 3, y), QPointF(x + bar_w + 3, y))
             else:
                 painter.drawLine(QPointF(x + bar_w, y), QPointF(x + bar_w + 3, y))
+            # the end labels always show; an inner label too close to one is left out
+            if M not in ends and any(abs(y - y_of(e)) < 13 for e in ends):
+                continue
             painter.setPen(color("text" if sonic else "text_muted"))
             painter.drawText(QRectF(x + bar_w + 7, y - 8, card.right() - x - bar_w - 10, 16),
                              Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
                              f"{M:.3g}")
+            self.legend_tick_labels.append(f"{M:.3g}")
 
     def legend_labels(self):
         """The class labels the legend draws, lowest Mach first (tests)."""

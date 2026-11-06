@@ -21,6 +21,7 @@ MAX_RAMPS = 4
 DEFAULT_CUSTOM_ANGLE = 8.0
 _DECIMALS_LENGTH = {"SI": 3, "Imperial": 2}
 _RAMP_ERROR = re.compile(r"^ramp (\d+):")
+NO_WIDTH_TEXT = "set a width first"
 CAPTURE_MODE_LABELS = (("height", "Set capture height"),
                        ("mass_flow", "Size to engine mass flow"))
 
@@ -234,7 +235,7 @@ class DesignPanel(QWidget):
             total = self.state.total_mass_flow()
             self.mdot.set_value(None if total is None else
                                 _units.to_display(total, "mass_flow", system))
-            self.mdot.set_placeholder("no width")
+            self.mdot.set_placeholder(NO_WIDTH_TEXT)
 
     def _show_design(self, result, error):
         system = self.state.inputs.units

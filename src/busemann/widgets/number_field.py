@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidg
 
 from inletdesign.units import UnitError, accepted_units, parse_quantity
 
+from ..crashlog import guarded
 from ..theme import qt as theme
 
 # example typed into the tooltip per quantity kind
@@ -77,7 +78,46 @@ class NumberField(QWidget):
             self.value_changed.emit(self._value)
 
     def set_placeholder(self, text):
-        self.edit.setPlaceholderText(text)
+        """Placeholder text; elided to the field width with the full text in the tooltip
+        when it does not fit (the tooltip always carries it)."""
+        self._placeholder = text or ""
+        self._fit_placeholder()
+
+    def placeholder_fits(self):
+        text = getattr(self, "_placeholder", "")
+        return self._placeholder_room() >= self.edit.fontMetrics().horizontalAdvance(text)
+
+    def _placeholder_room(self):
+        icon = 22 if self._lock_action is not None else 0          # leading lock action
+        return max(0, self.edit.width() - 2 * 8 - 4 - icon)
+
+    def _fit_placeholder(self):
+        text = getattr(self, "_placeholder", "")
+        if not text:
+            self.edit.setPlaceholderText("")
+            self._set_placeholder_tip(None)
+            return
+        fm = self.edit.fontMetrics()
+        if self.edit.width() <= 1 or self.placeholder_fits():
+            self.edit.setPlaceholderText(text)
+        else:
+            self.edit.setPlaceholderText(
+                fm.elidedText(text, Qt.TextElideMode.ElideRight, self._placeholder_room()))
+        self._set_placeholder_tip(text)
+
+    def _set_placeholder_tip(self, text):
+        base = getattr(self, "_base_tooltip", None)
+        if base is None:
+            base = self.edit.toolTip()
+            self._base_tooltip = base
+        full = f"{text}\n{base}" if text and base else (text or base)
+        self.edit.setToolTip(full)
+
+    @guarded()
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if getattr(self, "_placeholder", ""):
+            self._fit_placeholder()
 
     def set_locked(self, locked):
         """Read-only with a lock icon: the value is computed from another input."""
@@ -140,6 +180,9 @@ class NumberField(QWidget):
         full = f"{text}\n{hint}" if text and hint else (text or hint)
         super().setToolTip(full)
         self.edit.setToolTip(full)
+        self._base_tooltip = full
+        if getattr(self, "_placeholder", ""):
+            self._set_placeholder_tip(self._placeholder)
         self.unit_label.setToolTip(full)
 
     def _validate(self, text):

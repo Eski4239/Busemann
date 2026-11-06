@@ -107,3 +107,28 @@ def test_explain_sources_shown_in_the_popup_have_no_raw_symbols():
         for source in _re.findall(r"<!--\s*SOURCE:\s*(.+?)\s*-->", text):
             problems += _violations(f"{name}.md SOURCE", source)
     assert problems == []
+
+
+def test_rendered_explain_text_has_no_raw_symbols():
+    """What the Explain popup shows (after rendering): every SOURCE line, text and bullet
+    line and the title, for every case and item of the content tests."""
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "explain_cases", Path(__file__).with_name("test_explain_content.py"))
+    cases = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cases)
+    _render_all = cases._render_all
+
+    problems = []
+    for label, item, name, _ctx, rendered in _render_all():
+        where = f"{label}/{item}/{name}"
+        problems += _violations(f"{where} title", rendered.title)
+        for section, lines in rendered.sections.items():
+            for ln in lines:
+                if ln.source:
+                    problems += _violations(f"{where} {section} source", ln.source)
+                if ln.kind in ("text", "bullet"):
+                    problems += _violations(f"{where} {section}", ln.text)
+    assert sorted(set(problems)) == []

@@ -28,7 +28,8 @@ from ..tooltips import tip
 
 DRAWER_W = tokens.RIGHT_PANEL_WIDTH     # the tree fits the normal right column
 SLIDE_MS = 200
-POPUP_SIZE = (500, 600)
+POPUP_SIZE = (500, 600)           # preferred popup size (px)
+POPUP_MIN = (320, 280)            # smallest popup when space around the selection is tight
 _MARGIN = 2 * tokens.space(2) + 8      # text-browser margins + scrollbar, px
 ROLE = Qt.ItemDataRole.UserRole
 
@@ -41,6 +42,9 @@ class ExplainPopup(QDialog):
         self.setObjectName("explainPopup")
         self.setWindowTitle("Explain")
         self.setModal(False)
+        # a movable tool window: stays above the main window, has its own title bar
+        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowTitleHint
+                            | Qt.WindowType.WindowCloseButtonHint)
         self.resize(*POPUP_SIZE)
         self.title = QLabel("Explain")
         self.title.setObjectName("drawerTitle")
@@ -56,6 +60,7 @@ class ExplainPopup(QDialog):
         layout.addWidget(self.title)
         layout.addWidget(self.body, 1)
         self.images = {}                 # tex -> QImage (for tests)
+        self._image_width = None
 
     def show_rendered(self, rendered):
         self.title.setText(rendered.title)
@@ -102,11 +107,14 @@ class ExplainPopup(QDialog):
         return f'<img src="eq:{key}" width="{w}" height="{h}">'
 
     def _image(self, tex):
+        if self._image_width != self.width():
+            self.images.clear()                 # the popup was resized: rescale equations
+            self._image_width = self.width()
         if tex in self.images:
             return self.images[tex]
         renderer = QSvgRenderer(QByteArray(tex_to_svg(tex, tokens.COLORS["text"])))
         size = renderer.defaultSize()                           # pt from the SVG
-        max_w = POPUP_SIZE[0] - _MARGIN - 2 * tokens.space(2)
+        max_w = self.width() - _MARGIN - 2 * tokens.space(2)
         scale = min(PT_TO_PX, max_w / max(size.width(), 1))     # long equations shrink to fit
         w, h = max(1, round(size.width() * scale)), max(1, round(size.height() * scale))
         dpr = max(2.0, self.devicePixelRatioF())
@@ -282,8 +290,9 @@ class ExplainDrawer(QFrame):
             return
         s = self.state
         popup = self.popup
-        if show:
+        if show or popup.isVisible():
             self._place_popup()
+        if show:
             popup.show()
             popup.raise_()
         if s.design is None:
@@ -308,10 +317,55 @@ class ExplainDrawer(QFrame):
         popup.show_rendered(rendered)
         self.content_changed.emit(name)
 
+    def free_areas(self, item):
+        """Screen rects around the selected item where the popup may go: right of it (up
+        to the drawer), left of it, above and below it. Clipped to the screen."""
+        from PySide6.QtCore import QRect
+
+        gap = tokens.space(1)
+        drawer = QRect(self.mapToGlobal(self.rect().topLeft()), self.size())
+        screen = self.screen().availableGeometry() if self.screen() else drawer
+        right_end = drawer.left() - gap
+        if item is None:
+            return [QRect(screen.left(), drawer.top(), right_end - screen.left(),
+                          screen.bottom() - drawer.top())]
+        areas = [
+            QRect(item.right() + gap, screen.top(), right_end - item.right() - gap,
+                  screen.height()),                                     # right of the item
+            QRect(screen.left(), screen.top(), item.left() - gap - screen.left(),
+                  screen.height()),                                     # left of the item
+            QRect(screen.left(), screen.top(), right_end - screen.left(),
+                  item.top() - gap - screen.top()),                     # above
+            QRect(screen.left(), item.bottom() + gap, right_end - screen.left(),
+                  screen.bottom() - item.bottom() - gap),               # below
+        ]
+        return [a.intersected(screen) for a in areas if a.width() > 0 and a.height() > 0]
+
+    def _covered_rect(self):
+        canvas = getattr(self.window(), "current_canvas", None)
+        return canvas().selection_screen_rect() if callable(canvas) else None
+
     def _place_popup(self):
-        """Beside the drawer, over the centre column (never over the tree)."""
+        """Beside the drawer, never over the tree and never over the selected canvas item:
+        the popup goes into the largest free area around the item, as large as POPUP_SIZE
+        and never smaller than POPUP_MIN. A popup the user moved stays put unless it covers
+        the item."""
+        from PySide6.QtCore import QRect
+
+        item = self._covered_rect()
         if self.popup.isVisible():
+            current = self.popup.frameGeometry()
+            if item is None or not current.intersects(item):
+                return
+        areas = self.free_areas(item)
+        if not areas:
             return
-        top_left = self.mapToGlobal(self.rect().topLeft())
-        w, h = POPUP_SIZE
-        self.popup.move(max(0, top_left.x() - w - tokens.space(1)), top_left.y())
+        area = max(areas, key=lambda r: min(r.width(), POPUP_SIZE[0])
+                   * min(r.height(), POPUP_SIZE[1]))
+        w = max(POPUP_MIN[0], min(POPUP_SIZE[0], area.width()))
+        h = max(POPUP_MIN[1], min(POPUP_SIZE[1], area.height()))
+        drawer_top = self.mapToGlobal(self.rect().topLeft()).y()
+        x = area.right() - w + 1                 # against the drawer, or just left of the item
+        y = min(max(area.top(), drawer_top), area.bottom() - h + 1)
+        self.popup.resize(w, h)
+        self.popup.move(x, y)

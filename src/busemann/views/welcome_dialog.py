@@ -35,9 +35,9 @@ from ..widgets import section_title
 NEW_DESIGNS = (("Validation case", ("preset", "Validation case")),
                ("Blank (defaults)", ("blank",)))
 EXAMPLE_PRESETS = ("Concorde cruise", "XB-70", "SR-71", "X-15 record")
-EXAMPLES = (("validation_case", "Validation case design", "M 3.00 · 2 ramps · Phase 3 CFD"),
-            ("x15_four_ramp", "X-15 conditions, 4 ramps", "M 6.70 · real-gas warning"),
-            ("m3_cowl_constrained", "Cowl-constrained M3", "M 3.00 · 3 ramps · max cowl 30°"))
+# bundled example designs listed under the presets (the validation case and the X-15
+# conditions are already a card and a preset, so their DXFs are not listed again)
+EXAMPLES = (("m3_cowl_constrained", "Cowl-constrained M3", "M 3.00 · 3 ramps · max cowl 30°"),)
 MAX_RECENT = 8
 RECENT_EMPTY = "No recent designs yet. Open a DXF or start from a new design."
 IMAGE = ("images", "inlet_3d.png")

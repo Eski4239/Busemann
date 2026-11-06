@@ -161,7 +161,7 @@ def test_regime_bands_use_the_wedge(qtbot, window):
     cowl = [b for b in charts.bands if b.kind == "cowl"]
     assert cowl[0].hi == pytest.approx(2.6628, abs=1e-3)
     assert "wedge 6°" in charts.legends["margin"].text()
-    assert any("upper bound — cowl shock not modelled" in p.replace(" ", " ")
+    assert any("upper bound — cowl shock not modelled" in p.replace("\u00a0", " ")
                for p in charts.footer_parts)
 
 
@@ -318,3 +318,27 @@ def test_chart_legend_wraps_only_between_entries(qtbot, window):
         assert label.text().count("&nbsp;&nbsp; ") == len(
             [r for r in charts.legend_entries if (r[0] == "bands") == (label is charts.band_legend)]
         ) - 1
+
+
+def test_footer_wraps_only_between_entries_at_a_narrow_width(qtbot, window):
+    """M8.2 follow-up: no mid-word breaks (e.g. inside MIL-E-5008B); a narrow footer row
+    breaks only at entry boundaries."""
+    from PySide6.QtGui import QTextDocument
+
+    from busemann.charts.offdesign_charts import NB_HYPHEN
+
+    charts = _open_tab(qtbot, window).charts
+    entries = [t for row, t in charts.legend_entries if row == "notes"]
+    assert any(f"MIL{NB_HYPHEN}E{NB_HYPHEN}5008B" in t for t in entries)
+    for width in (240, 360, 520):
+        doc = QTextDocument()
+        doc.setDefaultFont(charts.note_legend.font())
+        doc.setHtml(charts.note_legend.text())
+        doc.setTextWidth(width)
+        block = doc.firstBlock()
+        layout = block.layout()
+        text = block.text()
+        for k in range(layout.lineCount()):
+            line = layout.lineAt(k)
+            piece = text[line.textStart():line.textStart() + line.textLength()].rstrip()
+            assert any(piece.endswith(e) for e in entries), (width, piece)

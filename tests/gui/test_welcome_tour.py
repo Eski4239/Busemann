@@ -36,10 +36,10 @@ def test_sections_new_design_examples_recent(welcome):
     items = [welcome.example_list.item(k) for k in range(welcome.example_list.count())]
     titles = [it.text().splitlines()[0] for it in items]
     assert titles[:4] == ["Concorde cruise", "XB-70", "SR-71", "X-15 record"]
-    assert len(titles) == 7
+    assert titles == ["Concorde cruise", "XB-70", "SR-71", "X-15 record", "Cowl-constrained M3"]
     kinds = [it.data(Qt.ItemDataRole.UserRole)[0] for it in items]
-    assert kinds == ["preset"] * 4 + ["example"] * 3
-    assert all(it.data(Qt.ItemDataRole.UserRole)[1].endswith(".dxf") for it in items[4:])
+    assert kinds == ["preset"] * 4 + ["example"]                  # no duplicates (M8.2+)
+    assert items[4].data(Qt.ItemDataRole.UserRole)[1].endswith("m3_cowl_constrained.dxf")
     assert not hasattr(welcome, "startup_check")            # "Show at startup" removed
 
 
@@ -67,7 +67,7 @@ def test_recent_rows_show_mach_ramps_and_date(qtbot, tmp_path):
     (lambda d: d.cards[0][1].click(), ("preset", "Validation case")),
     (lambda d: d.cards[1][1].click(), ("blank",)),
     (lambda d: d._activated(d.example_list.item(1)), ("preset", "XB-70")),
-    (lambda d: d._activated(d.example_list.item(5)), ("example",)),
+    (lambda d: d._activated(d.example_list.item(4)), ("example",)),
     (lambda d: d.reject(), None),
 ])
 def test_each_choice(welcome, pick, expected):

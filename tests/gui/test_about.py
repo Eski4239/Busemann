@@ -54,3 +54,15 @@ def test_about_text_is_plain():
     assert not re.search(r"—[^—]*—", text)                        # no em-dash chains
     assert "—" not in text
     assert A.ABOUT_TEXT.count(". ") + 1 <= 3                      # 2-3 sentences
+
+
+def test_about_window_uses_the_tokens(qtbot, window):
+    from busemann.theme import tokens
+
+    dialog = window.show_about()
+    qtbot.addWidget(dialog)
+    qtbot.wait(50)
+    image = dialog.grab().toImage()
+    corner = image.pixelColor(2, 2).name()
+    assert corner in (tokens.COLORS["surface"].lower(), tokens.COLORS["bg"].lower()), corner
+    dialog.close()

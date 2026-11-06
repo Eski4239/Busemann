@@ -162,7 +162,7 @@ def test_recovery_and_gap_update_live(qtbot, custom):
     assert state.gap is not None and state.gap[0] != gap0               # during the drag
     card = custom.results_panel.cards["recovery_total"]
     assert card.text() == f"{state.design.recovery_total:.4f}"
-    assert card.note("gap").startswith("Recovery ")
+    assert card.note("gap").startswith("Gap to optimum ")
     canvas.finish_corner_drag()
 
 
