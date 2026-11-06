@@ -464,6 +464,7 @@ class ResultsPanel(QWidget):
         for r, (key, label, value, text, unit) in enumerate(rows):
             self.selection_values[key] = value
             name = QLabel(label)
+            name.setTextFormat(Qt.TextFormat.RichText)
             name.setObjectName("readoutLabel")
             val = QLabel(text)
             val.setObjectName("readoutValue")

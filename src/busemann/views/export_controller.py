@@ -1,7 +1,8 @@
-"""File > Export menu (spec 4.7): geometry DXF, CFD domain DXFs, figures, results.
+"""File > Export menu (spec 4.7, M8.4): geometry DXF (also the save format), CFD domain
+DXFs, Gmsh .geo and the results (JSON, CSV).
 
 Every export carries the metadata header (export.metadata). Save dialogs remember the last
-folder and propose names like busemann_M3.00_2ramp_design.png.
+folder and propose names like busemann_M3.00_2ramp_geometry.dxf.
 """
 from pathlib import Path
 
@@ -12,14 +13,9 @@ from inletdesign import api
 from inletdesign.cfd_domain import export_cfd_domain_dxf, export_offdesign_domain_dxf
 from inletdesign.export import export_dxf
 
-from ..canvas import picture as P
-from ..export import figures as F
 from ..export import results as R
 from ..export.metadata import default_name, metadata
 from ..settings import app_settings
-
-FIGURE_FILTER = "PNG image, 300 dpi (*.png);;SVG vector (*.svg);;PDF document (*.pdf)"
-
 
 class ExportController(QObject):
     def __init__(self, window, menu):
@@ -30,17 +26,9 @@ class ExportController(QObject):
         self.actions = {}
         add = self._add
         add(menu, "geometry", "Geometry DXF…", self.export_geometry)
-        add(menu, "iges", "Geometry IGES…", self.export_iges)
-        add(menu, "points", "Wall points CSV…", self.export_points)
         add(menu, "gmsh", "Gmsh geometry (.geo)…", self.export_gmsh)
         add(menu, "cfd", "CFD domain DXF (design)…", self.export_cfd)
         add(menu, "cfd_off", "CFD domain DXF (off-design v2)…", self.export_cfd_offdesign)
-        menu.addSeparator()
-        add(menu, "canvas", "Canvas figure…", self.export_canvas)
-        charts = menu.addMenu("Off-design chart")
-        for kind, label in (("capture", "Capture"), ("recovery", "Recovery"),
-                            ("margin", "Cowl margin")):
-            add(charts, f"chart_{kind}", f"{label}…", lambda k=kind: self.export_chart(k))
         menu.addSeparator()
         add(menu, "json", "Results JSON…", self.export_json)
         add(menu, "csv", "Results CSV…", self.export_csv)
@@ -57,8 +45,6 @@ class ExportController(QObject):
             action.setEnabled(ok)
         has_ramps = ok and self.state.design.inputs.n_ramps > 0
         self.actions["cfd_off"].setEnabled(has_ramps)
-        for k in ("capture", "recovery", "margin"):
-            self.actions[f"chart_{k}"].setEnabled(self.state.sweep is not None)
 
     # --- dialogs ---------------------------------------------------------------------------
     def ask_path(self, title, name, file_filter):
@@ -115,18 +101,6 @@ class ExportController(QObject):
             return self._done(path)
         return None
 
-    def export_iges(self):
-        from inletdesign.export_cad import export_iges
-
-        return self._cad("Export geometry IGES", "geometry", "igs", "IGES (*.igs *.iges)",
-                         export_iges, "geometry IGES (entity 110 lines, mm)")
-
-    def export_points(self):
-        from inletdesign.export_cad import export_points_csv
-
-        return self._cad("Export wall points CSV", "wall_points", "csv", "CSV (*.csv)",
-                         export_points_csv, "wall points CSV (m)")
-
     def export_gmsh(self):
         from inletdesign.export_cad import export_gmsh_geo
 
@@ -155,48 +129,6 @@ class ExportController(QObject):
                 metadata=meta)
             self._notes(path, meta)
             return self._done(path)
-
-    def export_canvas(self):
-        off = self._is_off()
-        canvas = self.window.offdesign_tab.canvas if off else self.window.canvas
-        if canvas.inlet_scene.picture is None:
-            return None
-        kind = "offdesign" if off else "design"
-        name = default_name(self.state.inputs, kind, "png",
-                            self.state.off_design.M_inf if off else None)
-        path = self._path("Export canvas figure", name, FIGURE_FILTER)
-        if not path:
-            return None
-        sk = P.skeleton_from(self.state.design, self.state.off_design if off else None)
-        d = self.state.design.inputs
-        title = (f"M {d.M:.2f} design, {d.n_ramps} ramps"
-                 + (f", at M∞ {self.state.off_design.M_inf:.2f}" if off else ""))
-        try:
-            F.save_figure(F.canvas_figure(P.build(sk), title), path,
-                          self._meta("canvas figure"))
-        except ValueError as exc:
-            self._fail(exc)
-            return None
-        return self._done(path)
-
-    def export_chart(self, kind):
-        if self.state.sweep is None:
-            return None
-        path = self._path(f"Export {kind} chart",
-                          default_name(self.state.inputs, f"chart_{kind}", "svg"), FIGURE_FILTER)
-        if not path:
-            return None
-        lo, hi = self.window.offdesign_tab.charts.range
-        try:
-            F.save_figure(F.chart_figure(kind, self.state.design, self.state.sweep,
-                                         self.state.off_design_mach(), (lo, hi),
-                                         diffuser=self.state.inputs.diffuser_recovery,
-                                         demand=self.state.demand),
-                          path, self._meta(f"off-design chart: {kind}"))
-        except ValueError as exc:
-            self._fail(exc)
-            return None
-        return self._done(path)
 
     def export_json(self):
         path = self._path("Export results JSON",

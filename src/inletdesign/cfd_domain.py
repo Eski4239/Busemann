@@ -1,4 +1,4 @@
-"""CFD fluid-domain outline export for Phase 3 meshing (SpaceClaim/Fluent import).
+"""CFD fluid-domain outline export for CFD meshing (SpaceClaim/Fluent import).
 
 Two exporters:
 - export_cfd_domain_dxf: the design-point domain only -- the captured

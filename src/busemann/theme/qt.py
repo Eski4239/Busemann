@@ -78,6 +78,7 @@ def stylesheet():
         # (a test keeps its colour equal to the token).
         chevron_down=resource_path("icons", "chevron-down-muted.svg").as_posix(),
         chevron_right=resource_path("icons", "chevron-right-muted.svg").as_posix(),
+        chevron_up=resource_path("icons", "chevron-up-muted.svg").as_posix(),
     )
     return Template(text).substitute(values)
 

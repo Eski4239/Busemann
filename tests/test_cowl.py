@@ -216,7 +216,7 @@ def test_above_design_message_points_at_mach_reflection():
                       f"{r.cowl_margin_deg:.2f}°): Mach reflection at the lip likely; "
                       "recovery below the ideal value")
     assert f"{r.cowl_margin_deg:.2f}" == "1.82"
-    assert n.detail == ("Observed in Phase 3d CFD at M∞ 3.25: Mach reflection at the lip, "
+    assert n.detail == ("Observed in the validation CFD at M∞ 3.25: Mach reflection at the lip, "
                         "recovery 4.9% below the ideal value.")
     # at the design point the design-check wording is kept
     [on] = _cowl_notices(api.off_design_point(d, 3.0))

@@ -90,10 +90,11 @@ def test_interpolation_endpoints_and_midpoint():
 def test_dimensions_cover_spec_items():
     _, pic = _pic(n=2)
     labels = {d.label for d in pic.dimensions}
-    assert {"θ1", "θ2", "L1", "L2", "h_c", "h_t", "lip"} <= labels
-    h_c = next(d for d in pic.dimensions if d.label == "h_c")
+    assert {"θ<sub>1</sub>", "θ<sub>2</sub>", "L<sub>1</sub>", "L<sub>2</sub>", "h<sub>c</sub>",
+            "h<sub>t</sub>", "lip"} <= labels                    # rich-text subscripts (M8.4)
+    h_c = next(d for d in pic.dimensions if d.label == "h<sub>c</sub>")
     assert h_c.value == pytest.approx(0.1)
-    h_t = next(d for d in pic.dimensions if d.label == "h_t")
+    h_t = next(d for d in pic.dimensions if d.label == "h<sub>t</sub>")
     assert h_t.value == pytest.approx(api.design(3.0, 2).throat_height)
 
 

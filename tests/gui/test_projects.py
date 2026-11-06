@@ -186,8 +186,7 @@ def test_examples_open_as_untitled_copies(qtbot, window):
     assert window.project.path is None and not window.project.dirty
 
 
-@pytest.mark.parametrize("action, suffix", [("export_iges", ".igs"), ("export_points", ".csv"),
-                                            ("export_gmsh", ".geo"), ("export_geometry", ".dxf")])
+@pytest.mark.parametrize("action, suffix", [("export_gmsh", ".geo"), ("export_geometry", ".dxf")])
 def test_cad_exports_write_notes_beside_them(window, tmp_path, action, suffix):
     window.exports.ask_path = lambda title, name, flt: str(tmp_path / name)
     path = getattr(window.exports, action)()

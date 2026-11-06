@@ -1,4 +1,5 @@
-"""File > Export (M6): each action writes its file with metadata; folders are remembered."""
+"""File > Export (M6, M8.4): each action writes its file with metadata; folders are
+remembered. No IGES, point CSV or figure exports since M8.4."""
 import json
 
 import ezdxf
@@ -28,16 +29,16 @@ def test_every_export_action_writes_a_file(qtbot, window, tmp_path):
         action.trigger()
     files = sorted(p.name for p in tmp_path.iterdir() if p.suffix != ".ini")
     assert files == sorted(names + ["verification_notes.md"])   # beside the DXFs (M8)
-    assert names[:6] == ["busemann_M3.00_2ramp_geometry.dxf",
-                         "busemann_M3.00_2ramp_geometry.igs",
-                         "busemann_M3.00_2ramp_wall_points.csv",
-                         "busemann_M3.00_2ramp_geometry.geo",
-                         "busemann_M3.00_2ramp_cfd_domain.dxf",
-                         "busemann_M3.00_2ramp_cfd_offdesign_v2.dxf"]
-    assert "busemann_M3.00_2ramp_design.png" in names
+    assert names == ["busemann_M3.00_2ramp_geometry.dxf",
+                     "busemann_M3.00_2ramp_geometry.geo",
+                     "busemann_M3.00_2ramp_cfd_domain.dxf",
+                     "busemann_M3.00_2ramp_cfd_offdesign_v2.dxf",
+                     "busemann_M3.00_2ramp_results.json",
+                     "busemann_M3.00_2ramp_results.csv"]
+    assert not any(n.endswith((".igs", ".png", ".svg", ".pdf")) for n in names)
     geometry = dict(ezdxf.readfile(tmp_path / names[0]).header.custom_vars)
     assert geometry["app"] == "Busemann" and geometry["BUSEMANN_MACH"] == "3.0"  # reopens
-    for name in names[4:6]:
+    for name in names[2:4]:
         props = dict(ezdxf.readfile(tmp_path / name).header.custom_vars)
         assert props["app"] == "Busemann" and "inputs" in props
     data = json.loads((tmp_path / "busemann_M3.00_2ramp_results.json").read_text("utf-8"))
@@ -47,14 +48,12 @@ def test_every_export_action_writes_a_file(qtbot, window, tmp_path):
     assert "flow angle [°]" in csv_text and "# stations (design point)" in csv_text
 
 
-def test_offdesign_canvas_export_uses_offdesign_picture(qtbot, window, tmp_path):
+def test_offdesign_results_csv_uses_the_offdesign_point(qtbot, window, tmp_path):
     window.tabs.setCurrentWidget(window.offdesign_tab)
     with qtbot.waitSignal(window.state.off_design_ready, timeout=5000):
         window.state.update(off_design_mach=2.5)
     names = []
     _answer(window.exports, tmp_path, names)
-    path = window.exports.export_canvas()
-    assert path.name == "busemann_M3.00_2ramp_offdesign_M2.50.png" and path.exists()
     window.exports.export_csv()
     text = (tmp_path / "busemann_M3.00_2ramp_results.csv").read_text("utf-8-sig")
     assert "# stations (off-design at M∞ 2.50)" in text

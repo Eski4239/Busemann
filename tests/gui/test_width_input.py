@@ -59,7 +59,7 @@ def test_mass_flow_mode_width_rescales_the_capture_height(qtbot, window):
         return [lab.text() for lab in window.canvas.inlet_scene.dim_labels]
 
     # the drawing says so (after the 150 ms transition, labels are placed on the final frame)
-    qtbot.waitUntil(lambda: f"h_c {h * 1000:.1f} mm" in labels(), timeout=2000)
+    qtbot.waitUntil(lambda: f"hc {h * 1000:.1f} mm" in labels(), timeout=2000)
 
 
 def test_width_in_imperial_units(qtbot, window):

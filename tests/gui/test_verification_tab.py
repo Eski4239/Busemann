@@ -25,7 +25,7 @@ def test_tabs_and_badge(qtbot, window):
 
 
 def test_separation_notices_in_results_without_sources(window):
-    """M8.2: the Results panel shows the warning; the source and the Phase 3b quote are in
+    """M8.2: the Results panel shows the warning; the source and the validation CFD quote are in
     the Verification tab."""
     texts = window.results_panel.warning_texts()
     sep = [t for t in texts if t.startswith("Shock-induced separation likely")]
@@ -46,3 +46,31 @@ def test_every_geometry_and_cfd_export_writes_the_notes(qtbot, window, tmp_path,
     for item in window.state.verification_items():
         assert item.title in text and item.source in text
     assert "must be verified with a CFD solver" in text
+
+
+def test_no_validation_phase_names_in_the_verification_tab(qtbot, window):
+    """M8.4: every label and tooltip in the Verification and Results panels, at the design
+    point and above the design Mach (lip notice)."""
+    import re
+
+    from PySide6.QtWidgets import QLabel, QWidget
+
+    def texts():
+        out = []
+        for panel in (window.verification_panel, window.results_panel):
+            for w in panel.findChildren(QWidget):
+                out.append(w.toolTip())
+                if isinstance(w, QLabel):
+                    out.append(w.text())
+        return out
+
+    with qtbot.waitSignal(window.state.off_design_ready, timeout=5000):
+        window.state.update(off_design_mach=3.25)
+    window.tabs.setCurrentWidget(window.offdesign_tab)
+    qtbot.wait(200)
+    for state in ("off-design", "design"):
+        hits = [t for t in texts() if re.search(r"phase\s*3", t, re.I)]
+        assert hits == [], state
+        window.tabs.setCurrentWidget(window.canvas)
+        qtbot.wait(200)
+    assert any("validation CFD" in t for t in texts())

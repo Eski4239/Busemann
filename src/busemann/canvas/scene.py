@@ -5,7 +5,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QPolygonF, QTransform
 from PySide6.QtWidgets import (
     QGraphicsItem, QGraphicsPathItem, QGraphicsPolygonItem, QGraphicsRectItem, QGraphicsScene,
-    QGraphicsSimpleTextItem,
+    QGraphicsTextItem,
 )
 
 from inletdesign import units as _units
@@ -50,7 +50,7 @@ def pen(name, width=1.0, style=Qt.PenStyle.SolidLine, alpha=None):
 
 
 def bin_colors(edges):
-    """One QColor per Mach bin (see canvas.colors, shared with the figure export)."""
+    """One QColor per Mach bin (see canvas.colors)."""
     return [QColor(c) for c in _colors.bin_colors(edges)]
 
 
@@ -83,15 +83,18 @@ class _Layer(QGraphicsRectItem):
         self.setZValue(z)
 
 
-class Label(QGraphicsSimpleTextItem):
-    """Mono label of constant screen size, centred on its position, on a surface pill."""
+class Label(QGraphicsTextItem):
+    """Mono label of constant screen size, centred on its position, on a surface pill.
+    Text may be rich text (M8.4: real subscripts, h<sub>c</sub>); text() is the plain text."""
 
     PAD_X, PAD_Y, RADIUS = 4.0, 2.0, 4.0
 
     def __init__(self, text="", parent=None, size=tokens.SIZE_LABEL, color_name="text_muted"):
-        super().__init__(text, parent)
+        super().__init__(parent)
+        self.document().setDocumentMargin(0)
         self.setFont(theme.mono_font(size))
-        self.setBrush(color(color_name))
+        self.setDefaultTextColor(color(color_name))
+        self.setText(text)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIgnoresTransformations)
         self.preferred = (0.0, 0.0)     # model mm
         self.anchor = "center"
@@ -109,6 +112,15 @@ class Label(QGraphicsSimpleTextItem):
         painter.setBrush(color("surface", 0.85))
         painter.drawRoundedRect(self.boundingRect(), self.RADIUS, self.RADIUS)
         super().paint(painter, option, widget)
+
+    def setText(self, text):
+        if "<" in text:
+            self.setHtml(text)
+        else:
+            self.setPlainText(text)
+
+    def text(self):
+        return self.toPlainText()
 
     def set(self, text, model_pt, anchor="center"):
         self.setText(text)

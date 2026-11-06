@@ -1,5 +1,4 @@
-"""Canvas colours as hex strings (no Qt), shared by the Qt scene and the matplotlib export
-so the screen and an exported figure cannot diverge."""
+"""Canvas colours as hex strings (no Qt), used by the Qt scene and the tests."""
 import colorsys
 
 from ..theme import tokens

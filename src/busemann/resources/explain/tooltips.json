@@ -100,12 +100,12 @@
   "offcard.margin": "Local cowl margin at the lip at the slider Mach, in degrees (— when the lip flow is subsonic).",
   "offcard.regime": "Inlet regime at the slider Mach.",
   "offcard.delta": "Change from the design-point value, in the same units.",
-  "chart.legend.capture": "Line: model mass capture; circles: Phase 3d CFD, when available.",
-  "chart.legend.recovery": "Solid lines: total and oblique-only recovery; circles: Phase 3d CFD (oblique), when available.",
+  "chart.legend.capture": "Line: model mass capture; circles: the validation CFD, when available.",
+  "chart.legend.recovery": "Solid lines: total and oblique-only recovery; circles: the validation CFD (oblique), when available.",
   "chart.legend.margin": "Line: cowl margin at the lip with the current wedge, in degrees; dashed: detachment (0°).",
   "chart.legend.bands": "Shaded regime bands along the freestream Mach number.",
   "chart.legend.notes": "Notes on what the charts do not model.",
-  "chart.cfd_note": "Why the Phase 3d CFD points are not shown for this design.",
+  "chart.cfd_note": "Why the validation CFD points are not shown for this design.",
   "chart.axis.mach": "Freestream Mach number M∞, dimensionless.",
   "chart.axis.capture": "Mass capture ratio A0/Ac, dimensionless.",
   "chart.axis.recovery": "Total-pressure recovery p0/p0∞, dimensionless.",
@@ -177,6 +177,6 @@
   "offdesign.charts_toggle": "Show or hide the off-design charts: mass capture, recovery and cowl margin against the flight Mach number.",
   "kpi.cowl_margin": "Cowl margin θmax − cowl turn at the lip, in degrees; below 0° the external cowl shock is detached.",
   "results.banner": "Click to see the warnings below.",
-  "results.export": "Export the geometry (DXF, IGES, CSV points, Gmsh), results (CSV, JSON) or figures (PNG, SVG, PDF).",
+  "results.export": "Export the geometry (DXF, Gmsh .geo), the CFD domains (DXF) or the results (CSV, JSON).",
   "drawer.topic": "Click to open the explanation of this topic in its own window."
 }

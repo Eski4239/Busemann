@@ -1,23 +1,20 @@
-"""About Busemann (spec 4.8): what it is, model assumptions, validation evidence, licences.
+"""About Busemann (spec 4.8): what it is, model assumptions, how it was checked, licences.
 
-The validation table comes from resources/data/validation.json (the same file the off-design
-CFD overlay reads); licences from resources/licenses (components.json + the bundled texts),
+Licences from resources/licenses (components.json + the bundled texts),
 with versions and declared licences read from the installed package metadata.
 """
 import html
 import importlib.metadata as md
 import json
-from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QDialogButtonBox, QHBoxLayout, QHeaderView, QLabel, QListWidget,
-    QScrollArea, QTableWidget, QTableWidgetItem, QTextBrowser, QToolButton, QVBoxLayout,
-    QWidget,
+    QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QListWidget, QScrollArea, QTextBrowser,
+    QToolButton, QVBoxLayout, QWidget,
 )
 
 from .. import __version__
-from ..charts.model import load_validation
+from .. import verification as V
 from ..paths import resource_path
 from ..theme import tokens
 
@@ -44,21 +41,19 @@ def installed(dist):
     return meta.get("Version"), declared
 
 
-def doc_link(rel, repository):
-    """Local file link when the docs sit next to the source tree, else the GitHub page."""
-    local = Path(__file__).resolve().parents[3] / rel
-    if local.exists():
-        return local.as_uri()
-    return f"{repository}/blob/main/{rel}"
-
-
 ABOUT_TEXT = (
     "I made Busemann to design the ramps of a two-dimensional supersonic inlet and see what "
     "its shocks do. You give it a flight Mach number and the air it flies in; it finds the ramp "
     "angles (or takes yours), draws the shock system and shows the pressure recovery, the mass "
     "capture and the flow in every region. It does the same for the fixed inlet at other Mach "
     "numbers.")
-MAKER_TEXT = "Who made it and why: [your words here]"
+MAKER_TEXT = (
+    "My name is Pablo Goulet Valenti and I made this during my university years in order to "
+    "explore the world of high-speed flows. Inlets are a key part of powerplants and propulsion "
+    "systems, and being able to build an interactive solver to design these geometries allows "
+    "one to learn quite a bit. I hope this tool is useful to you and you learn something new "
+    "along the way too!")
+VALIDATION_TEXT = V.VALIDATION_SUMMARY
 ABOUT_ASSUMPTIONS = (
     "Two-dimensional, steady, inviscid flow of a calorically perfect gas (constant γ).",
     "Straight attached shocks: the ramp shocks meet at the cowl lip at the design Mach, and a "
@@ -79,7 +74,6 @@ class AboutDialog(QDialog):
         v.setContentsMargins(tokens.space(3), tokens.space(2), tokens.space(3), tokens.space(2))
         v.setSpacing(tokens.space(1))
         v.addWidget(self._about_section())
-        v.addWidget(self._heading("How it was checked"))
         v.addWidget(self._validation_tab())
         self.licences_toggle = QToolButton()
         self.licences_toggle.setObjectName("sectionToggle")
@@ -102,13 +96,6 @@ class AboutDialog(QDialog):
         layout.addWidget(scroll, 1)
         layout.addWidget(buttons)
 
-    @staticmethod
-    def _heading(text):
-        label = QLabel(text)
-        label.setObjectName("drawerTitle")
-        label.setToolTip(text)
-        return label
-
     def _show_licences(self, on):
         self.licences.setVisible(on)
         self.licences_toggle.setText("Licences" if on else "Licences ▸")
@@ -118,7 +105,7 @@ class AboutDialog(QDialog):
         text = QLabel(
             f"<h2 style='margin-bottom:2px'>Busemann {html.escape(__version__)}</h2>"
             f"<p>{html.escape(ABOUT_TEXT)}</p>"
-            f"<p><i>{html.escape(MAKER_TEXT)}</i></p>"
+            f"<p><b>Who made it and why</b></p><p>{html.escape(MAKER_TEXT)}</p>"
             f"<p><b>What it assumes</b></p><ul>{items}</ul>")
         text.setWordWrap(True)
         text.setTextFormat(Qt.TextFormat.RichText)
@@ -128,49 +115,12 @@ class AboutDialog(QDialog):
         return text
 
     def _validation_tab(self):
-        data = load_validation()
-        phases = data["phases"]
-        table = QTableWidget(len(phases), 3)
-        table.setObjectName("validationTable")
-        table.setHorizontalHeaderLabels(["Phase", "Case", "Result"])
-        for c, tip in enumerate(("Validation phase", "What was compared",
-                                 "Difference between CFD and the tool")):
-            table.horizontalHeaderItem(c).setToolTip(tip)
-        table.verticalHeader().hide()
-        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        table.setWordWrap(True)
-        for r, ph in enumerate(phases):
-            for c, text in enumerate((ph["id"], ph["title"], ph["result"])):
-                item = QTableWidgetItem(text)
-                item.setToolTip(ph.get("explanation", ph["result"]))
-                table.setItem(r, c, item)
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        table.resizeRowsToContents()
-        self.validation_table = table
-        explained = [ph for ph in phases if ph.get("explanation")]
-        notes = "".join(f"<p><b>{html.escape(ph['title'])}:</b> {html.escape(ph['explanation'])}"
-                        "</p>" for ph in explained)
-        repo = data["repository"]
-        links = " · ".join(
-            f"<a href='{doc_link(rel, repo)}'>{html.escape(rel)}</a>"
-            for rel in ("docs/validation_3b.md", "docs/validation_3d.md"))
-        info = QLabel(f"{notes}<p>Reports: {links}</p>")
+        info = QLabel(VALIDATION_TEXT)
         info.setWordWrap(True)
-        info.setTextFormat(Qt.TextFormat.RichText)
-        info.setOpenExternalLinks(True)
-        info.setToolTip("Why the above-design case differs, and the full validation reports.")
+        info.setTextFormat(Qt.TextFormat.PlainText)
+        info.setToolTip("How the solver was checked against closed-form values and CFD.")
         self.validation_info = info
-        table.setMinimumHeight(table.verticalHeader().length()
-                               + table.horizontalHeader().height() + 6)
-        page = QWidget()
-        v = QVBoxLayout(page)
-        v.setContentsMargins(0, 0, 0, 0)
-        v.addWidget(table)
-        v.addWidget(info)
-        return page
+        return info
 
     def _licences_tab(self):
         self.licence_list = QListWidget()

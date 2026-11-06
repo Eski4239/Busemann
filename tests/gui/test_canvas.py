@@ -165,7 +165,7 @@ def test_units_switch_relabels_dimensions(qtbot, window):
     window.state.update(units="Imperial")
     texts = [i.text() for i in window.canvas.inlet_scene.layers["dimensions"].childItems()
              if hasattr(i, "text")]
-    assert any(t.startswith("h_c") and t.endswith(" in") for t in texts)
+    assert any(t.startswith("hc") and t.endswith(" in") for t in texts)
 
 
 def test_section_labels_are_uppercase_with_tracking(window):
@@ -228,9 +228,12 @@ def test_dimension_labels_do_not_collide_and_fit_includes_them(qtbot, window):
     visible = canvas.mapToScene(canvas.viewport().rect()).boundingRect()
     assert visible.contains(scene.geometry_rect(include_labels=True))
     texts = [lab.text() for lab in scene.dim_labels]
-    assert any(t.startswith("h_c ") and t.endswith("100.0 mm") for t in texts)
+    assert any(t.startswith("hc ") and t.endswith("100.0 mm") for t in texts)
+    assert not any("_" in t for t in texts)                         # real subscripts
+    hc = next(lab for lab in scene.dim_labels if lab.text().startswith("hc "))
+    assert "vertical-align:sub" in hc.toHtml().replace(" ", "")      # rendered as a subscript
     window.state.update(units="Imperial")
-    assert any(t.text().startswith("h_c ") and t.text().endswith("3.94 in")
+    assert any(t.text().startswith("hc ") and t.text().endswith("3.94 in")
                for t in scene.dim_labels)
 
 
@@ -361,14 +364,13 @@ def test_max_cowl_with_custom_angles_shows_info_card(qtbot, window):
     assert "ignored for custom angles" in note
 
 
-def test_screen_legend_uses_class_labels_like_the_export(window):
+def test_screen_legend_uses_the_class_labels(window):
     from busemann.canvas import picture as P
-    from busemann.export import figures as F
 
     canvas = window.canvas
     edges = canvas.inlet_scene.mach_edges
     labels = canvas.legend_labels()
-    assert labels == [F.class_label(a, b) for a, b in zip(edges, edges[1:])]
+    assert labels == [P.class_label(a, b) for a, b in zip(edges, edges[1:])]
     assert labels[0].startswith("0.5–") and "–" in labels[-1]
     from PySide6.QtGui import QFontMetrics
     from busemann.theme import qt as theme

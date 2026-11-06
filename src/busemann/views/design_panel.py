@@ -11,7 +11,9 @@ from PySide6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QLabel, QVBoxLa
 from inletdesign import units as _units
 
 from ..theme import tokens
-from ..widgets import CollapsibleSection, NumberField, SegmentedControl, field_label, section_title
+from ..widgets import (
+    CollapsibleSection, NumberField, SegmentedControl, SpinField, field_label, section_title,
+)
 from . import format as fmt
 from .ramp_table import RampTable
 from .readout import Readout
@@ -80,10 +82,12 @@ class DesignPanel(QWidget):
         # Advanced: optional limit on the cowl angle of the Oswatitsch optimum (off by default).
         self.max_cowl_check = QCheckBox("Max cowl angle")
         self.max_cowl_check.setToolTip(tip("design.max_cowl"))
-        self.max_cowl = NumberField(i.max_cowl_deg, decimals=1, minimum=0.0, maximum=90.0,
-                                    min_exclusive=True, unit="°", quantity="angle")
-        self.wedge = NumberField(i.cowl_wedge_deg, decimals=1, minimum=0.0, maximum=30.0,
-                                 unit="°", quantity="angle")
+        # M8.4: spin boxes with hard limits (angles 0-90°, recovery 0-1); the core's physics
+        # checks (e.g. a lip wedge above 30°) still report on the field
+        self.max_cowl = SpinField(i.max_cowl_deg, decimals=1, minimum=0.0, maximum=90.0,
+                                  step=0.1, min_exclusive=True, unit="°", quantity="angle")
+        self.wedge = SpinField(i.cowl_wedge_deg, decimals=1, minimum=0.0, maximum=90.0,
+                               step=0.1, unit="°", quantity="angle")
         attach(self.wedge, "field.wedge")
         attach(self.max_cowl, "field.max_cowl")
         advanced_box = QWidget()
@@ -91,10 +95,15 @@ class DesignPanel(QWidget):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(tokens.space(1))
         grid.setVerticalSpacing(tokens.space(1))
+        # a long label goes above its field, so the field keeps the panel width (the 30 px
+        # fields of M8.3 scrolled their text out of view)
+        grid.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        grid.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        self.advanced_form = grid
         grid.addRow(self.max_cowl_check, self.max_cowl)
         grid.addRow(field_label("Cowl lip wedge", "label.cowl_lip_wedge"), self.wedge)
-        self.diffuser = NumberField(i.diffuser_recovery, decimals=3, minimum=0.0, maximum=1.0,
-                                    min_exclusive=True, quantity="dimensionless")
+        self.diffuser = SpinField(i.diffuser_recovery, decimals=3, minimum=0.0, maximum=1.0,
+                                  step=0.01, min_exclusive=True, quantity="dimensionless")
         attach(self.diffuser, "field.diffuser")
         grid.addRow(field_label("Diffuser recovery (estimate)", "label.diffuser"), self.diffuser)
         self.advanced = CollapsibleSection("Advanced", advanced_box, collapsed=True,
@@ -258,8 +267,13 @@ class DesignPanel(QWidget):
 
     def _show_error(self, error):
         """Route a core error to the ramp field it names, else show it under the method."""
-        for field in self.angle_fields:
+        for field in (*self.angle_fields, self.wedge, self.max_cowl):
             field.set_external_error(None)
+        if error and error.startswith(("cowl lip wedge", "max cowl angle")):
+            field = self.wedge if error.startswith("cowl lip wedge") else self.max_cowl
+            field.set_external_error(fmt.nbsp(error[:1].upper() + error[1:]))
+            self.custom_error.hide()
+            return
         target = None
         if error and self.state.inputs.method == "custom":
             match = _RAMP_ERROR.match(error)

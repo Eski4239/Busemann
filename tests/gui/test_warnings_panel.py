@@ -71,6 +71,6 @@ def test_flow_regions_heading_and_export_menu(window):
     menu = panel.export_button.menu()
     assert menu is window.project.export_menu                      # same actions as File
     texts = [a.text() for a in menu.actions() if a.text()]
-    for name in ("Geometry DXF…", "Geometry IGES…", "Wall points CSV…", "Gmsh geometry (.geo)…",
-                 "Results JSON…", "Results CSV…", "Canvas figure…"):
-        assert name in texts, name
+    assert texts == ["Geometry DXF…", "Gmsh geometry (.geo)…", "CFD domain DXF (design)…",
+                     "CFD domain DXF (off-design v2)…", "Results JSON…", "Results CSV…"]
+    assert not [a for a in menu.actions() if a.menu()]            # no figure submenu

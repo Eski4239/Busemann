@@ -44,6 +44,7 @@ class HoverCard(QFrame):
         self._labels.append(head)
         for r, (_key, label, _value, text, unit) in enumerate(rows, start=1):
             name = QLabel(label)
+            name.setTextFormat(Qt.TextFormat.RichText)
             name.setObjectName("readoutLabel")
             val = QLabel(text)
             val.setObjectName("readoutValue")

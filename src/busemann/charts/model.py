@@ -12,12 +12,12 @@ from inletdesign import api
 
 from ..paths import resource_path
 
-# Validated case of the Phase 3d CFD (docs/validation_3d.md): the overlay is shown only
+# Validated case of the validation CFD: the overlay is shown only
 # for this design.
 CFD_DESIGN = dict(M=3.0, n_ramps=2, method="oswatitsch", gamma=1.4)
 CFD_MACH_TOL = 1e-6
 CFD_GAMMA_TOL = 1e-9
-# band kind -> (colour token, alpha 0..255); shared by the Qt charts and the figure export
+# band kind -> (colour token, alpha 0..255); used by the Qt charts
 BAND_STYLE = {"detached": ("error", 22), "spillage": ("accent", 14),
               "overspeed": ("warn", 18), "cowl": ("error", 40)}
 CFD_NOTE = "CFD validation available for the M3 2-ramp design only"
@@ -33,12 +33,12 @@ class Band:
 
 
 def load_cfd():
-    """Bundled Phase 3d CFD points: dict with source, design, points [{M, capture, ...}]."""
+    """Bundled validation CFD points: dict with source, design, points [{M, capture, ...}]."""
     return load_validation()["cfd_overlay"]
 
 
 def load_validation():
-    """resources/data/validation.json: validation phases (About dialog) and the CFD overlay
+    """resources/data/validation.json: validation cases and the CFD overlay
     points; the single source of truth for both."""
     return json.loads(resource_path("data", "validation.json").read_text(encoding="utf-8"))
 
@@ -52,7 +52,7 @@ def _validated_geometry(design):
 
 def cfd_applies(design):
     """True when `design` is the validated case: M 3.0, 2 ramps, Oswatitsch, gamma 1.4,
-    not cowl-constrained, zero-thickness cowl (wedge 0, as in the Phase 3d CFD)."""
+    not cowl-constrained, zero-thickness cowl (wedge 0, as in the validation CFD)."""
     return (design is not None and _validated_geometry(design)
             and not (design.inputs.cowl_wedge_deg or 0.0))
 

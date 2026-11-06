@@ -30,17 +30,31 @@ CFD_STATEMENT = "must be verified with a CFD solver"
 SEVERITIES = ("error", "warn", "info")
 SEVERITY_TITLES = {"error": "Error", "warn": "Warning", "info": "Note"}
 
-PHASE_3B_DOC = "docs/validation_3b.md"
-# Phase 3b (viscous k-omega SST, M 3, 10 kPa, 220 K, h_c 0.1 m) at the validated geometry
-PHASE_3B = {
-    "ramp shock 1": "Phase 3b viscous CFD at this geometry: no separation on the first ramp.",
-    "ramp shock 2": ("Phase 3b viscous CFD at this geometry: a corner separation bubble at the "
-                     "second ramp corner, x = 109.5–125.0 mm, 15.5 mm long (0.155 h_c), "
-                     "peak reverse wall shear −81.7 Pa."),
-    "terminal normal shock": ("Phase 3b: the terminal shock was not simulated; a Mach 1.5 "
+# Viscous validation CFD (k-omega SST, M 3, 10 kPa, 220 K, capture height 0.1 m) at the
+# validated geometry; the report is docs/validation_3b.md (internal, not shown in the UI)
+VALIDATION_CFD = {
+    "ramp shock 1": "The validation CFD (viscous) at this geometry: no separation on the "
+                    "first ramp.",
+    "ramp shock 2": ("The validation CFD (viscous) at this geometry: a corner separation "
+                     "bubble at the second ramp corner, x = 109.5–125.0 mm, 15.5 mm long "
+                     "(0.155 of the capture height), peak reverse wall shear −81.7 Pa."),
+    "terminal normal shock": ("The validation CFD did not simulate the terminal shock; a "
+                              "Mach 1.5 "
                               "normal shock on the turbulent duct boundary layer is likely "
                               "to cause further separation losses."),
 }
+# How the solver was checked (About, verification_notes.md); user text, no internal names
+VALIDATION_SUMMARY = (
+    "How it was checked: every relation in the solver follows NACA Report 1135, and an "
+    "automated test suite of over 800 tests checks the results against closed-form values. "
+    "The designs were also compared with 2D CFD simulations in Ansys Fluent (density-based "
+    "solver, inviscid and k-ω SST viscous runs, with a mesh-refinement check). At the design "
+    "point the total-pressure recovery agreed within 0.35%, and below the design Mach within "
+    "0.1%, with mass capture within 0.4%. With boundary layers included, recovery was about 2% "
+    "lower, mainly because of a separation bubble at the second ramp corner, which Busemann's "
+    "separation warning flags. Above the design Mach the CFD showed a Mach reflection at the "
+    "cowl lip that this model does not include, so recovery there is an upper bound (the CFD "
+    "was 4.9% lower at Mach 3.25).")
 MIL_SOURCE = ("MIL-E-5008B (1959), as given by NASA Glenn Research Center, 'Inlet "
               "Performance', https://www.grc.nasa.gov/WWW/BGH/inleth.html (formula confirmed)")
 KORKEGI_TOOLTIP = (f"{_sep.KORKEGI_CRITERION}. Source: {_sep.KORKEGI_SOURCE}. "
@@ -55,7 +69,7 @@ class VerificationItem:
     criterion: str
     source: str
     text: str            # ends with the CFD statement
-    quote: str = None    # validation evidence that applies (Phase 3b), or None
+    quote: str = None    # validation evidence that applies (the validation CFD), or None
     tooltip: str = None  # criterion tooltip (e.g. the Korkegi correlation's scope)
 
 
@@ -71,7 +85,7 @@ def _cfd(text):
 
 def separation_items(checks, design, where="design point"):
     out = []
-    quotes = PHASE_3B if where == "design point" and _validated_geometry(design) else {}
+    quotes = VALIDATION_CFD if where == "design point" and _validated_geometry(design) else {}
     for c in checks:
         name = c.shock[:1].upper() + c.shock[1:]
         if not c.applicable:                    # ramp 1: leading-edge shock, no verdict
@@ -139,8 +153,8 @@ def items(design, inputs, fs=None, off=None, off_fs=None):
         "warn" if above else "info", "upper_bound",
         "Recovery above the design Mach is an upper bound",
         "Shock-in-duct regime (M∞ > design): cowl shock and duct reflections not modelled",
-        "Phase 3d CFD at M∞ 3.25: Mach reflection at the lip, recovery 4.9 % below the tool "
-        "(docs/validation_3d.md)",
+        "The validation CFD at M∞ 3.25: Mach reflection at the lip, recovery 4.9 % below "
+        "the tool",
         _cfd("Above the design Mach the off-design recovery is an upper bound")))
     # MIL comparison basis and the diffuser estimate
     out.append(VerificationItem(

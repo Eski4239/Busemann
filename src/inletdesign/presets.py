@@ -30,7 +30,7 @@ PRESETS = (
     ),
     Preset(
         "Validation case", 3.0,
-        "Freestream used for the Fluent validation runs (Phase 3).", p_pa=10000.0, T_k=220.0,
+        "Freestream used for the Fluent validation runs.", p_pa=10000.0, T_k=220.0,
     ),
 )
 

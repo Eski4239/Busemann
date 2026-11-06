@@ -9,6 +9,7 @@ from .kpi_card import KpiCard
 from .labeled_slider import LabeledSlider
 from .number_field import NumberField
 from .segmented import SegmentedControl
+from .spin_field import SpinField
 
 
 def section_title(text, key):
@@ -37,6 +38,6 @@ def divider():
 
 
 __all__ = [
-    "CollapsibleSection", "KpiCard", "LabeledSlider", "NumberField", "SegmentedControl",
+    "CollapsibleSection", "KpiCard", "LabeledSlider", "NumberField", "SegmentedControl", "SpinField",
     "section_title", "field_label", "divider",
 ]

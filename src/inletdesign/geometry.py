@@ -159,7 +159,7 @@ COWL_LIP_PREFIX = "Cowl lip shock"
 
 def cowl_lip_message(margin, level):
     """Above design Mach the lip sees freestream on both faces: a strong lip shock interacts
-    with the ramp shocks (Mach reflection, seen in the Phase 3d CFD at M 3.25)."""
+    with the ramp shocks (Mach reflection, seen in the validation CFD at M 3.25)."""
     state = "detached" if level == "error" else "near detachment"
     return (f"{COWL_LIP_PREFIX} {state} (θmax − turn = {margin:.2f}°): Mach reflection at "
             "the lip likely; recovery below the ideal value")

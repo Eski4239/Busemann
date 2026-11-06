@@ -22,8 +22,9 @@ menus or windows, never extra rows on existing panels unless listed here.
 - **Right panel tabs:** Results · Verification.
 - **Tools menu → Isentropic ramp…** opens a separate window.
 - **Files:** designs are DXF drawings (section I). No other project format.
-- **Exports:** geometry DXF, IGES (lines), wall-point CSV, Gmsh .geo, CFD domain DXFs,
-  results JSON/CSV and figure PNG/SVG/PDF. NO animation export. Every geometry/CFD export
+- **Exports (M8.4):** geometry DXF (also the save format), CFD domain DXFs (design and
+  off-design), Gmsh .geo, results JSON/CSV. No IGES, wall-point CSV or figure
+  (PNG/SVG/PDF) export, and NO animation export. Every geometry/CFD export
   also writes `verification_notes.md` next to it (section E). File ▸ Export and the
   Results tab's Export button hold the same actions.
 
@@ -42,9 +43,8 @@ menus or windows, never extra rows on existing panels unless listed here.
    buttons keep Space), Ctrl+Z/Ctrl+Shift+Z, Ctrl+S/O/N, 1–4 main tabs. The mouse wheel
    changes a slider, combo box or number field only while it has focus; otherwise it
    scrolls the panel.
-5. Export styling: the matplotlib canvas figure matches the screen (wall hatching on the
-   flow side only, same spacing feel, tight bounding box, legend bins scaled honestly
-   or labelled as discrete classes).
+5. Export styling: the matplotlib canvas figure matched the screen. *Withdrawn in M8.4:
+   figure exports were removed (section K).*
 
 ## C. Designer additions (M8)
 
@@ -72,7 +72,7 @@ menus or windows, never extra rows on existing panels unless listed here.
 5. **Separation warnings (approximate).** Shock/boundary-layer incipient-separation
    check on every ramp shock and the terminal shock, using published empirical
    criteria (sources required, I confirm each). Always worded "approximate — verify
-   with CFD". Phase 3b CFD (15.5 mm bubble) is quoted where it applies.
+   with CFD". The validation CFD (15.5 mm bubble) is quoted where it applies.
 6. **Verification tab** (right panel): every approximation and warning (separation,
    buzz, cowl detachment, real gas, upper-bound recovery, drag estimates), each with
    severity, the criterion used, its source and "must be verified with a CFD solver".
@@ -146,9 +146,9 @@ The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
   more than 4 ramps, a ramp turning away from the cowl).
 - Recent list, welcome window, title and dirty tracking work on DXF paths. Bundled
   examples are DXFs (`tools/make_examples.py`).
-- **CFD-tool exports** (each with `verification_notes.md`): IGES 5.3 with one entity 110
-  line per wall segment (mm); point CSV (x, y in m, one block per wall); Gmsh `.geo`
-  (Point / Line in m, Physical Curve RAMP and COWL).
+- **CFD-tool export** (with `verification_notes.md`): Gmsh `.geo` (Point / Line in m,
+  Physical Curve RAMP and COWL). The IGES and point-CSV exports of M8.2 were removed in
+  M8.4 (section K).
 
 ## J. M8.2 revision (after user testing)
 
@@ -181,6 +181,38 @@ The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
 6. **Method buttons:** "Optimum angles" (tooltip "Oswatitsch optimum: equal-strength
    shocks, maximum total-pressure recovery for this number of ramps") and "Custom
    angles" ("Set each ramp angle yourself").
-7. **About:** short, first person: what Busemann is, who made it and why (placeholder for
-   the author), three assumptions, the validation table, licences collapsed.
+7. **About:** short, first person: what Busemann is, who made it and why, three
+   assumptions, how it was checked, licences collapsed (M8.4 text: section K).
 
+## K. M8.4 revision
+
+1. **About ▸ Who made it and why:** "My name is Pablo Goulet Valenti and I made this
+   during my university years in order to explore the world of high-speed flows. Inlets
+   are a key part of powerplants and propulsion systems, and being able to build an
+   interactive solver to design these geometries allows one to learn quite a bit. I hope
+   this tool is useful to you and you learn something new along the way too!"
+2. **About ▸ How it was checked:** one paragraph replaces the validation table (NACA
+   Report 1135 relations, over 800 automated tests, Ansys Fluent 2D CFD inviscid and
+   k-ω SST with a mesh check; design point within 0.35 %, below design within 0.1 %
+   recovery and 0.4 % capture, viscous about 2 % lower with the second-corner bubble,
+   above design an upper bound, CFD 4.9 % lower at Mach 3.25). The same paragraph is
+   the validation summary of `verification_notes.md`.
+3. **No internal phase names** ("Phase 3a/3b/3d") in any user-facing text: About,
+   tooltips, Explain, Verification, the notes, warnings and the chart CFD markers say
+   "the validation CFD" with the same numbers. A test fails on any user string matching
+   `/phase\s*3/i`. The validation reports stay in `docs/` but are not linked from the UI.
+4. **Advanced numeric inputs** (max cowl angle, cowl lip wedge, diffuser recovery, γ) are
+   spin boxes: arrows plus unit-aware typing, at least 96 px wide, label above the field
+   when it does not fit beside it. Hard limits: angles 0–90° (step 0.1°), diffuser
+   recovery 0–1 (step 0.01), γ 1–5/3 (step 0.01). A typed value outside the limits is
+   clamped with the field note "Maximum 90°" (or the limit reached); the arrows and the
+   wheel stop at the limit; the wheel works only when the field has focus. Physics checks
+   for allowed but unwise values stay (e.g. the core's 0–30° lip-wedge range is reported
+   on the field; recovery 0 and a max cowl angle of 0 are shown as errors, not applied).
+5. **Exports trimmed:** IGES, wall-point CSV and the figure exports (canvas and
+   off-design charts, PNG/SVG/PDF) are removed. matplotlib stays a dependency: the
+   Explain equations are rendered with its mathtext (and the core CLI plot and
+   `tools/render_inlet_3d.py` use it).
+6. **Canvas dimension labels** use real subscripts (h<sub>c</sub>, h<sub>t</sub>,
+   L<sub>1</sub>, θ<sub>1</sub>, rich text), and so do the hover / selection read-out
+   labels (M<sub>n1</sub>, p<sub>2</sub>/p<sub>1</sub>). A test scans them for "_".

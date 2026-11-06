@@ -11,8 +11,8 @@
     },
     {
       "id": "3b",
-      "title": "Mesh check (refined mesh vs 3a)",
-      "result": "Reproduces 3a within 0.15% everywhere",
+      "title": "Mesh check (refined mesh)",
+      "result": "Reproduces the design-point run within 0.15% everywhere",
       "metric": "all compared quantities",
       "difference_percent": 0.15,
       "doc": "docs/validation_3b.md"
@@ -39,7 +39,7 @@
     }
   ],
   "cfd_overlay": {
-    "source": "Phase 3d inviscid Fluent CFD (docs/validation_3d.md)",
+    "source": "The validation CFD (inviscid, Ansys Fluent)",
     "design": {
       "M": 3.0,
       "n_ramps": 2,

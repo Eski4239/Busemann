@@ -337,15 +337,15 @@ class AppState(QObject):
 
     def _separation_notices(self, notices, design_point):
         """(level, text, detail) of approximate separation notices; at the validated geometry
-        the design-point tooltip quotes the Phase 3b viscous CFD."""
+        the design-point tooltip quotes the viscous validation CFD."""
         from . import verification as V
 
-        quotes = V.PHASE_3B if design_point and V._validated_geometry(self.design) else {}
+        quotes = V.VALIDATION_CFD if design_point and V._validated_geometry(self.design) else {}
         out = []
         for n in notices:
-            shock = next((k for k in V.PHASE_3B if k in n.text), None)
+            shock = next((k for k in V.VALIDATION_CFD if k in n.text), None)
             quote = quotes.get(shock)
-            detail = f"{n.detail}\n{quote} ({V.PHASE_3B_DOC})" if quote else n.detail
+            detail = f"{n.detail}\n{quote}" if quote else n.detail
             out.append((n.level, n.text, detail))
         return out
 

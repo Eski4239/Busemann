@@ -45,13 +45,10 @@ def render(meta, items, validation=None):
                 f"- Source: {item.source}",
                 f"- {item.text}"]
         if item.quote:
-            out.append(f"- Validation evidence: {item.quote} ({V.PHASE_3B_DOC})")
+            out.append(f"- Validation evidence: {item.quote}")
         out.append("")
-    out += ["## Validation summary", "",
-            f"Repository: {validation.get('repository', '—')}", "",
-            "| Phase | Check | Result | Document |", "|---|---|---|---|"]
-    for p in validation.get("phases", []):
-        out.append(f"| {p['id']} | {p['title']} | {p['result']} | {p['doc']} |")
+    out += ["## Validation summary", "", V.VALIDATION_SUMMARY, "",
+            f"Repository: {validation.get('repository', '—')}"]
     out += ["", "## CFD statement", "", CFD_PARAGRAPH, ""]
     return "\n".join(out)
 

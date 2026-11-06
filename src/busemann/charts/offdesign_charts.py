@@ -1,7 +1,7 @@
 """Off-design chart strip (spec 4.5): mass capture, recovery and cowl margin against M_inf.
 
 Three pyqtgraph plots with a linked M_inf axis, shaded regime bands, a design-point line,
-a movable cursor kept in sync with the off-design slider, and the Phase 3d CFD points
+a movable cursor kept in sync with the off-design slider, and the validation CFD points
 (hollow circles) when the design is the validated case.
 """
 import math

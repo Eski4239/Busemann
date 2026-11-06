@@ -6,7 +6,8 @@ from inletdesign import units as _units
 
 from ..theme import tokens
 from ..widgets import (
-    CollapsibleSection, LabeledSlider, NumberField, SegmentedControl, field_label, section_title,
+    CollapsibleSection, LabeledSlider, NumberField, SegmentedControl, SpinField, field_label,
+    section_title,
 )
 from ..inputs import preset_changes
 from .readout import Readout
@@ -69,9 +70,9 @@ class FlightPanel(QWidget):
 
         gamma_box = QWidget()
         gamma_form = _form(gamma_box)
-        self.gamma = NumberField(i.gamma, decimals=3, minimum=GAMMA_RANGE[0],
-                                 maximum=GAMMA_RANGE[1], min_exclusive=True,
-                                 quantity="dimensionless")
+        self.gamma = SpinField(i.gamma, decimals=3, minimum=GAMMA_RANGE[0],
+                               maximum=GAMMA_RANGE[1], step=0.01, min_exclusive=True,
+                               quantity="dimensionless")
         attach(self.gamma, "field.gamma")
         gamma_form.addRow(field_label("γ (cp/cv)", "label.gamma"), self.gamma)
         self.advanced = CollapsibleSection("Advanced", gamma_box, collapsed=True,

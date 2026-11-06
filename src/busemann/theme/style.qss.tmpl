@@ -77,6 +77,35 @@ QLineEdit[invalid="true"] { border-bottom: 2px solid $error; }
 QLineEdit:read-only { background: $bg; color: $text_muted; }
 
 #fieldError { color: $error; font-size: ${size_label}px; }
+#fieldNote { color: $text_muted; font-size: ${size_label}px; }
+
+/* M8.4: spin boxes (Advanced inputs) styled like the line edits, with token arrows */
+QAbstractSpinBox {
+    font-family: "$font_mono", "$font_mono_fallback";
+    background: $surface;
+    color: $text;
+    border: ${border_w}px solid $border;
+    border-radius: ${radius}px;
+    padding: 3px 2px 3px ${s1}px;
+    selection-background-color: $accent;
+    min-width: 96px;
+}
+QAbstractSpinBox:focus { border-color: $accent; color: $text; }
+QAbstractSpinBox[invalid="true"] { border-bottom: 2px solid $error; }
+QAbstractSpinBox:disabled { background: $bg; color: $text_muted; }
+QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {
+    subcontrol-origin: border;
+    width: 16px;
+    border: none;
+    background: transparent;
+}
+QAbstractSpinBox::up-button { subcontrol-position: top right; }
+QAbstractSpinBox::down-button { subcontrol-position: bottom right; }
+QAbstractSpinBox::up-button:hover, QAbstractSpinBox::down-button:hover { background: $bg; }
+QAbstractSpinBox::up-arrow { image: url("$chevron_up"); width: 10px; height: 10px; }
+QAbstractSpinBox::down-arrow { image: url("$chevron_down"); width: 10px; height: 10px; }
+QAbstractSpinBox::up-arrow:disabled, QAbstractSpinBox::up-arrow:off,
+QAbstractSpinBox::down-arrow:disabled, QAbstractSpinBox::down-arrow:off { image: none; }
 
 QComboBox {
     background: $surface;

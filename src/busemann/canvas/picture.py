@@ -251,7 +251,7 @@ class Shock:
 @dataclass
 class Dimension:
     kind: str                # "linear" | "angle" | "callout"
-    label: str               # prefix, e.g. "h_c" or "θ1"
+    label: str               # rich-text prefix, e.g. "h<sub>c</sub>" or "θ<sub>1</sub>"
     value: float             # metres for lengths, degrees for angles; None for callouts
     points: tuple            # linear: (a, b, d0, d1); angle: (centre,); callout: (point, text_at)
     radius: float = 0.0      # angle only
@@ -381,7 +381,7 @@ def _dimensions(sk, ramp_surface):
         q = _add(c, _dir(a1), d)
         r = 0.6 * d
         label_at = _add(q, _dir(a0 + 180.0 - 0.5 * (a1 - a0) - 14.0), 1.5 * r)
-        dims.append(Dimension("angle", f"θ{i + 1}", sk.ramp_angles[i], (q,), radius=r,
+        dims.append(Dimension("angle", f"θ<sub>{i + 1}</sub>", sk.ramp_angles[i], (q,), radius=r,
                               angles=(a0 + 180.0, a1 + 180.0), text_at=label_at))
     # Ramp lengths: offset dimension below each ramp segment.
     for i in range(sk.n):
@@ -390,11 +390,11 @@ def _dimensions(sk, ramp_surface):
         off = 0.24 * h
         d0, d1 = _add(a, nrm, off), _add(b, nrm, off)
         length = math.hypot(b[0] - a[0], b[1] - a[1]) / MM
-        dims.append(Dimension("linear", f"L{i + 1}", length, (a, b, d0, d1),
+        dims.append(Dimension("linear", f"L<sub>{i + 1}</sub>", length, (a, b, d0, d1),
                               text_at=_add(_lerp_pt(d0, d1, 0.5), nrm, 0.08 * h)))
     # Capture height: vertical dimension left of the drawn flow domain.
     x = sk.x_left - 0.12 * h
-    dims.append(Dimension("linear", "h_c", sk.h / MM,
+    dims.append(Dimension("linear", "h<sub>c</sub>", sk.h / MM,
                           ((sk.x_left, 0.0), (sk.x_left, h), (x, 0.0), (x, h)),
                           text_at=(x - 0.04 * h, 0.5 * h), anchor="right"))
     # Duct entry (throat) height along the terminal line, offset into the duct.
@@ -402,7 +402,7 @@ def _dimensions(sk, ramp_surface):
     off = 0.35 * h
     d0, d1 = _add(sk.foot, duct, off), _add(sk.lip, duct, off)
     throat = math.hypot(sk.lip[0] - sk.foot[0], sk.lip[1] - sk.foot[1]) / MM
-    dims.append(Dimension("linear", "h_t", throat, (sk.foot, sk.lip, d0, d1),
+    dims.append(Dimension("linear", "h<sub>t</sub>", throat, (sk.foot, sk.lip, d0, d1),
                           text_at=_add(_lerp_pt(d0, d1, 0.5), duct, 0.08 * h)))
     # Lip position callout.
     dims.append(Dimension("callout", "lip", None, (sk.lip,),

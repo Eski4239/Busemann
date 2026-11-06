@@ -117,6 +117,17 @@ def main():
     if not field.placeholder_fits() and NO_WIDTH_TEXT not in field.edit.toolTip():
         problems.append({"widget": "NumberField", "name": "mdot placeholder",
                          "size": [field.edit.width(), 0], "min_hint": [0, 0]})
+    # M8.4: the Advanced spin boxes are at least 96 px wide (the text was invisible at 30 px)
+    window.design_panel.advanced.toggle.setChecked(True)
+    window.flight_panel.advanced.toggle.setChecked(True)
+    settle(300)
+    for name, field in (("max_cowl", window.design_panel.max_cowl),
+                        ("wedge", window.design_panel.wedge),
+                        ("diffuser", window.design_panel.diffuser),
+                        ("gamma", window.flight_panel.gamma)):
+        if field.spin.width() < 96:
+            problems.append({"widget": "SpinField", "name": name,
+                             "size": [field.spin.width(), 0], "min_hint": [96, 0]})
     if len(sys.argv) > 1:
         window.grab().save(sys.argv[1])
     window.state.shutdown()

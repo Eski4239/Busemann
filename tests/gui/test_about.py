@@ -1,10 +1,11 @@
-"""About dialog (M6): description, assumptions, validation table, licences."""
+"""About dialog (M6, M8.4): description, maker, assumptions, how it was checked, licences."""
 import pytest
 
 pytest.importorskip("PySide6")
 pytest.importorskip("pytestqt")
 
-from busemann.charts import model  # noqa: E402
+import html  # noqa: E402
+import re  # noqa: E402
 
 pytestmark = pytest.mark.gui
 
@@ -16,18 +17,23 @@ def test_about_dialog_sections(qtbot, window):
     qtbot.addWidget(dialog)
     text = dialog.about_label.text()
     assert "I made Busemann" in text and "inviscid" in text
-    assert "[your words here]" in text and len(A.ABOUT_ASSUMPTIONS) == 3
+    assert "[your words here]" not in text and len(A.ABOUT_ASSUMPTIONS) == 3
+    assert "Who made it and why" in text
+    assert A.MAKER_TEXT == (
+        "My name is Pablo Goulet Valenti and I made this during my university years in order "
+        "to explore the world of high-speed flows. Inlets are a key part of powerplants and "
+        "propulsion systems, and being able to build an interactive solver to design these "
+        "geometries allows one to learn quite a bit. I hope this tool is useful to you and you "
+        "learn something new along the way too!")
+    assert html.escape(A.MAKER_TEXT) in text
     assert not dialog.licences.isVisibleTo(dialog)               # licences collapsed
     dialog.licences_toggle.setChecked(True)
     assert dialog.licences.isVisibleTo(dialog)
-    table = dialog.validation_table
-    phases = model.load_validation()["phases"]
-    assert table.rowCount() == len(phases)
-    assert [table.item(r, 2).text() for r in range(table.rowCount())] == \
-        [p["result"] for p in phases]
-    assert "Mach reflection" in dialog.validation_info.text()
-    assert "validation_3b.md" in dialog.validation_info.text()
-    assert "validation_3d.md" in dialog.validation_info.text()
+    assert not hasattr(dialog, "validation_table")                # the table is gone
+    assert dialog.validation_info.text() == A.VALIDATION_TEXT
+    assert dialog.validation_info.text().startswith("How it was checked: every relation")
+    assert "4.9% lower at Mach 3.25" in dialog.validation_info.text()
+    assert not re.search(r"phase\s*3", text + dialog.validation_info.text(), re.I)
     names = [dialog.licence_list.item(i).text() for i in range(dialog.licence_list.count())]
     assert any(n.startswith("PySide6 / Qt") and "LGPL-3.0" in n for n in names)
     assert any("SIL OFL 1.1" in n for n in names)

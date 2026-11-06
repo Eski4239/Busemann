@@ -132,3 +132,85 @@ def test_rendered_explain_text_has_no_raw_symbols():
                 if ln.kind in ("text", "bullet"):
                     problems += _violations(f"{where} {section}", ln.text)
     assert sorted(set(problems)) == []
+
+
+# --- M8.4: internal validation-phase names ("Phase 3b", "phase 3d") never reach the user ---
+PHASE = re.compile(r"phase\s*3", re.I)
+
+
+def _phase_texts():
+    """(where, text) of every user-facing string that could name a validation phase."""
+    from dataclasses import fields
+
+    from busemann import verification as V
+    from busemann.charts import model as CM
+    from busemann.explain.content import ENTRY_NAMES
+    from busemann.export import notes as N
+    from busemann.export.metadata import metadata
+    from busemann.inputs import Inputs, freestream_for
+    from inletdesign import presets
+
+    out = [("tooltips.json", resource_path("explain", "tooltips.json").read_text(encoding="utf-8")),
+           ("validation.json", resource_path("data", "validation.json").read_text(encoding="utf-8")),
+           ("chart CFD note", CM.CFD_NOTE), ("chart CFD wedge note", CM.CFD_WEDGE_NOTE),
+           ("chart CFD source", CM.load_cfd()["source"]), ("cowl lip note", api.CFD_LIP_NOTE),
+           ("validation summary", V.VALIDATION_SUMMARY)]
+    out += [(f"{n}.md", resource_path("explain", f"{n}.md").read_text(encoding="utf-8"))
+            for n in ENTRY_NAMES]
+    out += [(f"preset {p.name}", f"{p.name} {p.description}") for p in presets.PRESETS]
+    out += [(f"quote {k}", q) for k, q in V.VALIDATION_CFD.items()]
+    out += [("message", t) for t in _notices()]
+    i = Inputs()
+    d = api.design(3.0, 2)
+    for Mo in (2.5, 3.0, 3.25):
+        off = api.off_design_point(d, Mo)
+        out += [("off-design detail", n.detail or "") for n in off.notices + off.separation_notices]
+        items = V.items(d, i, freestream_for(i, 3.0), off, freestream_for(i, Mo))
+        for it in items:
+            out += [(f"item {it.title}", str(getattr(it, f.name) or "")) for f in fields(it)]
+        out.append(("verification_notes.md",
+                    N.render(metadata(i, "geometry DXF"), items)))
+    out += [("design detail", n.detail or "") for n in d.notices + d.separation_notices]
+    return out
+
+
+def test_no_user_facing_string_names_a_validation_phase():
+    hits = [f"{where}: {text[:120]!r}" for where, text in _phase_texts() if PHASE.search(text)]
+    assert hits == []
+    assert any("the validation CFD" in t for _, t in _phase_texts())    # rephrased, not lost
+
+
+# --- M8.4: canvas dimension labels and hover / selection rows use real subscripts ---------
+CASES = ((3.0, 1), (3.0, 2), (3.0, 3), (6.7, 4))
+
+
+def test_canvas_dimension_labels_have_no_underscores():
+    from busemann.canvas import picture as P
+
+    texts = []
+    for M, n in CASES:
+        pic = P.build(P.skeleton_from(api.design(M, n)))
+        texts += [(f"M{M} n{n}", dim.label) for dim in pic.dimensions]
+    assert texts and [f"{w}: {t!r}" for w, t in texts if "_" in t] == []
+    assert ("M3.0 n2", "h<sub>c</sub>") in texts and ("M3.0 n2", "h<sub>t</sub>") in texts
+
+
+def test_hover_and_selection_rows_have_no_underscores():
+    pytest.importorskip("PySide6")              # busemann.views imports Qt
+    from busemann.canvas import picture as P
+    from busemann.inputs import Inputs, freestream_for
+    from busemann.views.rows import cowl_rows, region_rows, shock_rows
+
+    texts = []
+    for M, n in CASES:
+        d = api.design(M, n)
+        sk = P.skeleton_from(d)
+        pic = P.build(sk)
+        fs = freestream_for(Inputs(mach=M, n_ramps=n), M)
+        for r in d.regions:
+            texts += [(f"M{M} n{n} region", row[1]) for row in region_rows(r, fs, "SI")]
+        for s in pic.shocks:
+            texts += [(f"M{M} n{n} shock", row[1]) for row in shock_rows(s.state)]
+        texts += [(f"M{M} n{n} cowl", row[1]) for row in cowl_rows(sk)]
+    assert texts and [f"{w}: {t!r}" for w, t in texts if "_" in t] == []
+    assert any(t == "M<sub>n1</sub>" for _, t in texts)

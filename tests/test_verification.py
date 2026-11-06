@@ -1,4 +1,6 @@
 """Verification list and verification_notes.md (addendum C6 / E, no Qt)."""
+import re
+
 import pytest
 
 from inletdesign import api
@@ -64,4 +66,5 @@ def test_notes_contain_every_item_and_the_cfd_statement(tmp_path, validation_ite
     for a in V.ASSUMPTIONS:
         assert a in text
     assert "## CFD statement" in text and N.CFD_PARAGRAPH in text
-    assert "| mach | 3 |" in text and "Phase" in text and "validation_3b.md" in text
+    assert "| mach | 3 |" in text and V.VALIDATION_SUMMARY in text
+    assert not re.search(r"phase\s*3", text, re.I) and "validation_3" not in text

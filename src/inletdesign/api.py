@@ -495,8 +495,8 @@ def _geometry_of(design_result):
                           gamma=i.gamma)
 
 
-CFD_LIP_NOTE = ("Observed in Phase 3d CFD at M∞ 3.25: Mach reflection at the lip, recovery "
-                "4.9% below the ideal value.")
+CFD_LIP_NOTE = ("Observed in the validation CFD at M∞ 3.25: Mach reflection at the lip, "
+                "recovery 4.9% below the ideal value.")
 
 
 def _notice(text):

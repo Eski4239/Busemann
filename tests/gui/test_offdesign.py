@@ -147,7 +147,7 @@ def test_cfd_markers_are_hollow_with_source_tooltips(qtbot, window):
     assert [p.pos().x() for p in capture.points()] == [2.5, 2.75, 3.0, 3.25]   # no M 3.5
     assert recovery.opts["brush"].color().alpha() == 0                         # hollow
     tip = recovery.points()[3].data()
-    assert "Phase 3d inviscid Fluent" in tip and "Mach reflection at lip" in tip
+    assert "The validation CFD (inviscid, Ansys Fluent)" in tip and "Mach reflection at lip" in tip
     assert "M 3.5" in tip and "before the terminal shock" in tip
     assert [p.pos().y() for p in recovery.points()] == [0.8466, 0.8283, 0.8011, 0.733]
 
@@ -173,9 +173,9 @@ def test_above_design_lip_notice_keeps_cfd_out_of_results(qtbot, window):
     panel = window.results_panel
     [i] = [k for k, t in enumerate(panel.warning_texts()) if t.startswith("Cowl lip shock")]
     row = panel.warning_rows[i]
-    assert "Phase 3d CFD" not in row.toolTip() + row.body.toolTip()
+    assert "validation CFD" not in row.toolTip() + row.body.toolTip()
     items = window.state.verification_items()
-    assert any("Phase 3d CFD" in it.text for it in items if it.category == "notice")
+    assert any("the validation CFD at M∞ 3.25" in it.text for it in items if it.category == "notice")
     # off-design notices are listed only while the off-design view is active
     window.tabs.setCurrentWidget(window.canvas)
     assert not any(t.startswith("Cowl lip shock") for t in panel.warning_texts())
