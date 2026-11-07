@@ -2,6 +2,7 @@
 labels instead of a legend box, a current-design ring, an optional vertical limit line,
 nearest-point hover tooltips and click-to-select. Styled like the off-design charts."""
 import math
+import textwrap
 
 import pyqtgraph as pg
 from PySide6.QtCore import QPointF, Qt, Signal
@@ -24,10 +25,10 @@ SPECIAL = {"isentropic": tokens.COLORS["text"], "mil": tokens.COLORS["warn"],
            # drag (M9b): additive, cowl and their sum
            "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"],
            # inlet characteristic (M9c)
-           "super": tokens.COLORS["accent"], "sub": tokens.COLORS["accent"],
-           "buzz": tokens.COLORS["error"]}
-DASHED = ("isentropic", "mil", "theta", "total", "buzz")
+           "super": tokens.COLORS["accent"], "sub": tokens.COLORS["accent"]}
+DASHED = ("isentropic", "mil", "theta", "total")
 BAND_ALPHA = 28
+BAND_WRAP = 30                # characters per line of a band label
 
 
 def series_pen(key, width=2.0):
@@ -54,6 +55,7 @@ class TradeChart(QWidget):
         self.last_hover = None    # text of the last hover tooltip
         self.vline = None
         self.bands = []           # (lo, hi, label) of shaded "not computable" ranges
+        self.x_range = None       # fixed (lo, hi), or None: fitted to the data
         self._band_items = []
         self.title = field_label(title, tip_key)
         self.legend = QLabel()
@@ -89,6 +91,7 @@ class TradeChart(QWidget):
         item.addItem(self.sel_marker)
         self.marker_text = None
         self.plot.scene().sigMouseMoved.connect(self._on_move)
+        item.vb.sigRangeChanged.connect(self._on_range)
         self.plot.scene().sigMouseClicked.connect(self._on_click)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -107,6 +110,7 @@ class TradeChart(QWidget):
         self.series = {}
         self.set_selected(None)
         self.set_bands([])
+        self.set_x_range(None)
         self.marker.setData([])
         self.marker_text = None
         if self.vline is not None:
@@ -139,7 +143,28 @@ class TradeChart(QWidget):
                                 label=text_item, pickable=pickable, name=label)
         self._layout_axes()
 
+    def set_x_range(self, x_range):
+        """Fix the x axis to (lo, hi), the y axis following the visible data; None: fit x
+        to the data again."""
+        self.x_range = None if x_range is None else (float(x_range[0]), float(x_range[1]))
+        vb = self.plot.getPlotItem().vb
+        vb.setAutoVisible(y=self.x_range is not None)
+        if self.x_range is not None:
+            vb.enableAutoRange(axis="y")
+        self._layout_axes()
+
+    def _span(self):
+        if self.x_range is not None:
+            return self.x_range[1] - self.x_range[0]
+        xs = [x for s in self.series.values() for x in s["x"] if math.isfinite(x)]
+        return (max(xs) - min(xs)) if xs else 1.0
+
     def _layout_axes(self):
+        if self.x_range is not None:
+            self.plot.getPlotItem().setXRange(*self.x_range, padding=0.0)
+            if not self.end_labels:
+                self.legend.setText(self.legend_html())
+            return
         xs = [x for s in self.series.values() for x in s["x"] if math.isfinite(x)]
         if not xs:
             return
@@ -176,8 +201,7 @@ class TradeChart(QWidget):
         for b in self._band_items:
             item.removeItem(b)
         self._band_items, self.bands = [], list(bands)
-        xs = [x for s in self.series.values() for x in s["x"] if math.isfinite(x)]
-        span = (max(xs) - min(xs)) if xs else 1.0
+        span = self._span()
         for lo, hi, label in self.bands:
             region = pg.LinearRegionItem((lo, hi), movable=False,
                                          brush=pg.mkBrush(_qc(token, BAND_ALPHA)),
@@ -185,7 +209,8 @@ class TradeChart(QWidget):
             region.setZValue(-5)
             region.setToolTip(label)
             item.addItem(region, ignoreBounds=True)
-            text = pg.TextItem(label, color=QColor(tokens.COLORS[token]), anchor=(0.5, 0.0))
+            text = pg.TextItem(textwrap.fill(label, BAND_WRAP),
+                               color=QColor(tokens.COLORS[token]), anchor=(0.5, 0.0))
             text.setFont(theme.mono_font(9))
             item.addItem(text, ignoreBounds=True)
             text.setVisible(hi - lo >= 0.15 * span)     # narrow band: tooltip only
@@ -200,6 +225,10 @@ class TradeChart(QWidget):
                 region = self._band_items[self._band_items.index(item) - 1]
                 lo, hi = region.getRegion()
                 item.setPos(0.5 * (lo + hi), y1)
+
+    @guarded()
+    def _on_range(self, *_):
+        self.place_band_text()
 
     def set_vline(self, x, label, token="error"):
         item = self.plot.getPlotItem()

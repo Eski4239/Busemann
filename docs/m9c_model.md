@@ -179,9 +179,25 @@ Moeckel's method as written (TN 1921), then its application to a ramp inlet.
     Moeckel's analysis "is independent of the nature of the shock below this origin" (p. 18).
   - Output: the shock vertex distance L(τ) ahead of the lip and the hyperbola, which item 4
     intersects with ramp shock n.
-- **Validity range.** Moeckel: not valid near M₀ = 1 (p. 14, the subsonic region grows
-  without bound); best when the sonic line has little curvature (p. 15). Busemann's
-  extension: the shock must stay in region n (until it meets ramp shock n).
+- **Validity range (M9c.1).** TN 1921 p. 14, exact words: "The theoretical values
+  obtained by the present method are not expected to be valid near M0 = 1.0, because the
+  subsonic field becomes very large relative to the body (yS/ySB → ∞) and small variations
+  in the assumed form and inclination of the sonic line have a large effect on the computed
+  drag. Equation (24) becomes indeterminate for M0 = 1 because cos η, B, and k are all unity
+  for sonic free-stream velocity." Also p. 1 (Summary: "except … for free-stream Mach numbers
+  close to 1.0") and p. 22 ("The method also fails in the vicinity of sonic free-stream
+  velocity"). The report gives no number. The lowest two-dimensional Mach number at which
+  it compares the method with experiment is M 1.2 (fig. 7, p. 29, reference 5, read from
+  the figure).
+  - **Limit (user-confirmed):** by the region-n rule it applies to M_n: **M_n ≥ 1.2**
+    (`MOECKEL_MIN_MACH`). Below it the expelled shock, the subcritical branch and the buzz
+    onset are not computed; the chart shades the subcritical side "outside the method's
+    validity (flow behind the last ramp near Mach 1, Moeckel TN 1921 p. 14)" and the
+    takeaway says the stable range is not computed.
+  - **Validation design:** M_n = 1.2 at **M∞ = 2.572**, so the band shows for
+    2.39 < M∞ < 2.572 (at M∞ ≈ 2.39, M_n reaches 1 and the characteristic is not defined).
+  - Best when the sonic line has little curvature (p. 15). Busemann's extension: the shock
+    must stay in region n (until it meets ramp shock n).
 - **Exact or empirical:** approximate (labelled "approximate").
 
 ## 4. Buzz onset
@@ -305,7 +321,8 @@ the lip) is a direct qualitative check of what the model predicts.
 
 | M∞ | M_n | τ_b exact | A0/Ac at onset, exact | τ_b θ_n fallback | A0/Ac, fallback |
 |---|---|---|---|---|---|
-| 2.5 | 1.130 | 0.0391 | 0.7370 | 0.0383 | 0.7376 |
+| 2.5 | 1.130 | not computed: M_n below 1.2 (outside the method's validity) | | | |
+| 2.6 | 1.224 | 0.0540 | 0.7728 | 0.0580 | 0.7696 |
 | 2.75 | 1.342 | 0.0461 | 0.8459 | 0.0559 | 0.8373 |
 | 3.0 (on-lip) | 1.507 | 0 | 1.0000 | 0 | 1.0000 |
 
@@ -314,8 +331,8 @@ the lip) is a direct qualitative check of what the model predicts.
   point has no solution and the θ_n fallback is used; both give a zero stable range,
   consistent with Ferri & Nucci p. 7, finding 2.
 - The stable range ΔMFR = MFR_crit τ_b grows from 0 at the design point to about 0.044 near
-  M 2.6–2.7 as the shocks move ahead of the lip (Ferri & Nucci's trend), then shrinks again
-  towards ramp-shock detachment (M∞ ≈ 2.39), where M_n → 1 and Moeckel's method loses
-  validity (TN 1921, p. 14). The tests check the trend only from the design point down to
-  M 2.75.
+  M 2.6–2.7 as the shocks move ahead of the lip (Ferri & Nucci's trend). Below M∞ 2.572
+  (M_n < 1.2) it is no longer computed (validity limit above); before M9c.1 it appeared to
+  shrink there, an artefact of the method near Mach 1. The tests check the trend from the
+  design point down to M 2.75.
 

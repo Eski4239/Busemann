@@ -19,6 +19,14 @@ freestream Mach number (M9c; model note docs/m9c_model.md). Per unit width, plan
   Concluding Remarks p. 25 -- buzz starts when the vortex sheet from the shock intersection
   enters the cowl. Tested on conical inlets at M 1.9-2.7; the 2D multi-ramp application is a
   Busemann extension.
+- Validity (MOECKEL_MIN_MACH): TN 1921 p. 14, "The theoretical values obtained by the present
+  method are not expected to be valid near M0 = 1.0, because the subsonic field becomes very
+  large relative to the body (yS/ySB -> infinity) and small variations in the assumed form and
+  inclination of the sonic line have a large effect on the computed drag." The report gives
+  no number; the lowest two-dimensional Mach number at which it compares the method with
+  experiment is M 1.2 (fig. 7, p. 29, reference 5, read from the figure). By the region-n
+  rule the limit applies to M_n: below M_n = 1.2 the expelled shock, the subcritical branch
+  and the buzz onset are not computed.
 
 Angles in degrees at this API; inputs are api.DesignResult / api.OffDesignResult objects.
 """
@@ -33,6 +41,9 @@ from . import oblique_shock as _obl
 TESTED_MACH = (1.9, 2.7)          # Ferri & Nucci RM L50K30, p. 7 (finding 1)
 ZERO_RANGE_TAU = 1e-6             # below this the stable subcritical range is "zero"
 TAU_MAX = 0.5
+MOECKEL_MIN_MACH = 1.2            # on M_n: TN 1921 p. 14 (why), fig. 7 p. 29 (the number)
+OUTSIDE_VALIDITY_NOTE = ("outside the method's validity (flow behind the last ramp near "
+                         "Mach 1, Moeckel TN 1921 p. 14)")
 
 
 # --- quasi-1D relations ----------------------------------------------------------------------
@@ -182,6 +193,8 @@ class Characteristic:
     buzz: BuzzOnset          # exact method (point-wise fallback), None if not modelled
     buzz_fallback: BuzzOnset
     note: str = None         # why a part is missing
+    valid: bool = True       # False: M_n below MOECKEL_MIN_MACH (no subcritical model)
+    M_n: float = None        # Mach number behind the last ramp shock
 
 
 # --- critical / supercritical / subcritical ---------------------------------------------------
@@ -432,6 +445,10 @@ def buzz_onset(design, off, method="exact", tau_max=TAU_MAX):
     the sheet along theta_n."""
     if method not in ("exact", "fallback"):
         raise ValueError(f"method must be 'exact' or 'fallback' (got {method!r})")
+    M_n = off.regions[len(off.ramp_angles_deg)].M
+    if M_n < MOECKEL_MIN_MACH:
+        raise ValueError(f"M {M_n:.3f} behind the last ramp shock is below "
+                         f"{MOECKEL_MIN_MACH:g}: {OUTSIDE_VALIDITY_NOTE}")
     crit_mfr = float(off.mass_capture_ratio)
     extrapolated = not TESTED_MACH[0] <= off.M_inf <= TESTED_MACH[1]
     grid = [ZERO_RANGE_TAU] + [tau_max * k / 80 for k in range(1, 81)]
@@ -469,9 +486,14 @@ def inlet_characteristic(design, off, area_ratio_=2.0):
     _check_ar(area_ratio_)
     crit = critical_point(design, off, area_ratio_)
     sup = supercritical_branch(design, off, area_ratio_)
+    M_n = float(off.regions[len(off.ramp_angles_deg)].M)
     if off.regime == "shock-in-duct":
         return Characteristic(float(off.M_inf), float(area_ratio_), crit, sup, (), None, None,
-                              ABOVE_DESIGN_NOTE)
+                              ABOVE_DESIGN_NOTE, M_n=M_n)
+    if M_n < MOECKEL_MIN_MACH:
+        return Characteristic(float(off.M_inf), float(area_ratio_), crit, sup, (), None, None,
+                              OUTSIDE_VALIDITY_NOTE, valid=False, M_n=M_n)
     sub = subcritical_branch(design, off, area_ratio_)
     return Characteristic(float(off.M_inf), float(area_ratio_), crit, sup, sub,
-                          buzz_onset(design, off, "exact"), buzz_onset(design, off, "fallback"))
+                          buzz_onset(design, off, "exact"), buzz_onset(design, off, "fallback"),
+                          M_n=M_n)

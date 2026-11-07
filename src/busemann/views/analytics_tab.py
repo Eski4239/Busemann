@@ -4,14 +4,18 @@
 isentropic limit, θmax line) and "Recovery vs design Mach" (n = 0-4 optima, MIL-E-5008B, and
 the cowl angle with θmax below). Hover a point for its numbers; click one and "Apply this
 design" sets n, the design Mach and (when constrained) the max cowl angle as one undo step.
-The numbers come from a worker thread, curve by curve, cached by (M, γ).
+The numbers come from a worker thread, curve by curve, cached by (M, γ). The inlet
+characteristic (M9c) has its own worker, cached by (design, M∞, diffuser area ratio).
 """
+from dataclasses import dataclass
+
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from inletdesign import api
+from inletdesign.characteristic import MOECKEL_MIN_MACH, OUTSIDE_VALIDITY_NOTE
 
 from ..analytics import takeaways as T
 from ..charts.analytics_charts import TradeChart
@@ -25,7 +29,10 @@ VIEWS = (("turning", "Recovery vs turning"), ("mach", "Recovery vs design Mach")
 PAGES = {"turning": 0, "mach": 1, "drag": 2, "char": 3}
 CHAR_TITLE = "Recovery vs mass-flow ratio at M∞ {M:.2f} (approximate)"
 BUZZ_LINE_TEXT = "buzz onset (Ferri–Nucci, approximate)"
-BUZZ_BAND_TEXT = "buzz (approximate)"
+BUZZ_BAND_TEXT = "buzz (unsteady, approximate)"
+VALIDITY_BAND_TEXT = OUTSIDE_VALIDITY_NOTE
+CHAR_CACHE_SIZE = 64          # characteristics kept (slider positions x area ratios)
+NO_TRIPLE_POINT = "no regular triple point; vortex sheet taken along θ<sub>n</sub>"
 SEPARATION_LINE = ("If the ramp boundary layer separates (the separation check flags it for "
                    "this design), the real stable range is likely smaller than shown (Ferri & "
                    "Nucci, RM L50K30).")
@@ -103,8 +110,64 @@ class _AnalyticsJob(QRunnable):
         self.signals.done.emit(g)
 
 
+@dataclass(frozen=True)
+class CharData:
+    """Everything the characteristic view draws, computed off the GUI thread."""
+    key: tuple
+    c: object = None              # inletdesign.characteristic.Characteristic, or None
+    error: str = None
+    stable: tuple = ()            # CharPoint, critical first, ending at the onset
+    shock_L: tuple = ()           # L / capture height for each stable point (None at tau 0)
+
+
+def compute_char_data(key, design, off, area_ratio):
+    """Worker side of the characteristic view (no Qt)."""
+    from inletdesign import characteristic as _char
+
+    try:
+        c = api.inlet_characteristic(design, off, area_ratio)
+    except ValueError as exc:
+        return CharData(key, error=str(exc))
+    if c.buzz is None:
+        return CharData(key, c)
+    tau_b = c.buzz.tau
+    stable = [p for p in c.subcritical if p.tau <= tau_b]
+    if not stable or stable[-1].tau < tau_b:
+        crit, gamma = c.critical, design.inputs.gamma
+        m_crit = _char.mass_flow_function(crit.M_exit, gamma)
+        M_x = (_char.mach_from_mass_flow(m_crit * (1.0 - tau_b), gamma) if tau_b > 0
+               else crit.M_exit)
+        stable.append(_char.CharPoint(mfr=crit.mfr * (1.0 - tau_b), recovery=crit.recovery,
+                                      p_exit=crit.recovery * _char.p_over_pt(M_x, gamma),
+                                      M_exit=M_x, tau=tau_b))
+    h = design.inputs.capture_height
+    shock_L = tuple(api.moeckel_shock(design, off, p.tau).L / h if p.tau else None
+                    for p in stable)
+    return CharData(key, c, stable=tuple(stable), shock_L=shock_L)
+
+
+class _CharSignals(QObject):
+    done = Signal(int, object)                     # generation, CharData
+
+
+class _CharJob(QRunnable):
+    def __init__(self, generation, key, design, off, area_ratio):
+        super().__init__()
+        self.setAutoDelete(False)
+        self.generation, self.args = generation, (key, design, off, area_ratio)
+        self.signals = _CharSignals()
+
+    def run(self):
+        try:
+            data = compute_char_data(*self.args)
+        except Exception as exc:                    # noqa: BLE001 (shown, never raised)
+            data = CharData(self.args[0], error=str(exc))
+        self.signals.done.emit(self.generation, data)
+
+
 class AnalyticsTab(QWidget):
     computed = Signal()           # every curve of the current (M, γ) has arrived
+    char_computed = Signal()      # the characteristic view has drawn its current inputs
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
@@ -212,6 +275,12 @@ class AnalyticsTab(QWidget):
         vc.addWidget(self.char_separation)
         self.pages.addWidget(page_c)
         self.characteristic = None
+        self.char_data = None
+        self._char_pool = QThreadPool(self)
+        self._char_pool.setMaxThreadCount(1)
+        self._char_gen = 0
+        self._char_jobs = {}
+        self._char_cache = {}
         self._char_timer = QTimer(self)
         self._char_timer.setSingleShot(True)
         self._char_timer.setInterval(120)            # coalesce slider updates
@@ -368,8 +437,14 @@ class AnalyticsTab(QWidget):
 
     def shutdown(self):
         self._generation += 1
-        self._pool.clear()
-        self._pool.waitForDone(2000)
+        self._char_gen += 1
+        self._char_timer.stop()
+        for pool in (self._pool, self._char_pool):
+            pool.clear()
+            pool.waitForDone(2000)
+
+    def char_busy(self):
+        return bool(self._char_jobs) or self._char_timer.isActive()
 
     # --- drawing ----------------------------------------------------------------------------
     def _apply_partial(self, kind, key, payload):
@@ -632,30 +707,65 @@ class AnalyticsTab(QWidget):
             f"Ramp angles: {_angles(c.ramps_deg[i])}"])
 
     # --- inlet characteristic (M9c) ---------------------------------------------------------
-    def update_characteristic(self):
-        """Characteristic and buzz onset of the design at the off-design slider Mach (closed
-        form plus small root-finds on the GUI thread, ~0.1 s; coalesced by a timer)."""
+    def _char_key(self):
         d, off = self.state.design, self.state.off_design
-        ar = self.state.inputs.diffuser_area_ratio
-        self._drawn_ar = ar
+        if d is None or off is None or not d.inputs.n_ramps:
+            return None
+        return (d.inputs, round(float(off.M_inf), 10),
+                float(self.state.inputs.diffuser_area_ratio))
+
+    def update_characteristic(self):
+        """Draw the characteristic at the off-design slider Mach: from the cache, or after
+        the worker computes it (the GUI thread never runs the model)."""
+        self._drawn_ar = self.state.inputs.diffuser_area_ratio
+        key = self._char_key()
+        if key is None:
+            self._char_gen += 1                   # drop any job in flight
+            self._draw_char(None)
+            return
+        if key in self._char_cache:
+            self._char_gen += 1
+            self._draw_char(self._char_cache[key])
+            return
+        self._char_gen += 1
+        self._char_pool.clear()                   # queued (not running) jobs are stale
+        job = _CharJob(self._char_gen, key, self.state.design, self.state.off_design, key[2])
+        job.signals.done.connect(self._on_char_done)
+        self._char_jobs[self._char_gen] = job
+        self._char_pool.start(job)
+
+    def _on_char_done(self, generation, data):
+        self._char_jobs.pop(generation, None)
+        self._char_cache[data.key] = data         # model errors are deterministic too
+        while len(self._char_cache) > CHAR_CACHE_SIZE:
+            self._char_cache.pop(next(iter(self._char_cache)))
+        if generation != self._char_gen or data.key != self._char_key():
+            return                                # stale: dropped
+        self._draw_char(data)
+
+    def _draw_char(self, data):
         chart = self.char_chart
         chart.clear()
         self.char_separation.setVisible(False)
-        self.characteristic = None
-        if d is None or off is None or not d.inputs.n_ramps:
+        self.char_data = data
+        self.characteristic = None if data is None else data.c
+        if data is None:
             self.char_takeaway.setText("No characteristic: the design needs ramps and an "
                                        "attached off-design point.")
             self.char_caption.setText("")
-            return
-        try:
-            c = api.inlet_characteristic(d, off, ar)
-        except ValueError as exc:
-            self.char_takeaway.setText(f"No characteristic at M∞ {off.M_inf:.2f}: {exc}.")
+        elif data.c is None:
+            M = self.state.off_design.M_inf if self.state.off_design is not None else 0.0
+            self.char_takeaway.setText(f"No characteristic at M∞ {M:.2f}: {data.error}.")
             self.char_caption.setText("")
-            return
-        self.characteristic = c
+        else:
+            self._draw_char_curves(data)
+        self.char_computed.emit()
+
+    def _draw_char_curves(self, data):
+        c, d, chart = data.c, self.state.design, self.char_chart
         chart.title.setText(CHAR_TITLE.format(M=c.M_inf))
         crit = c.critical
+        no_triple = c.buzz is not None and not c.buzz.exact_used
 
         def sup_text(i):
             p = c.supercritical[i]
@@ -667,66 +777,70 @@ class AnalyticsTab(QWidget):
         chart.set_series("super", [p.mfr for p in c.supercritical],
                          [p.recovery for p in c.supercritical], sup_text,
                          label="supercritical (quasi-1D)", pickable=False)
-        crit_text = (f"Critical point at M∞ {c.M_inf:.2f}<br>Recovery {crit.recovery:.4f}"
-                     f"<br>A0/Ac {crit.mfr:.4f}<br>Throttle p<sub>x</sub>/p<sub>0∞</sub> "
-                     f"{crit.p_exit:.4f}")
-        chart.set_marker(crit.mfr, crit.recovery, crit_text)
+        crit_lines = [f"Critical point at M∞ {c.M_inf:.2f}", f"Recovery {crit.recovery:.4f}",
+                      f"A0/Ac {crit.mfr:.4f}",
+                      f"Throttle p<sub>x</sub>/p<sub>0∞</sub> {crit.p_exit:.4f}"]
+        if c.buzz is not None and c.buzz.zero_range:
+            crit_lines.append("buzz onset here: no stable subcritical range")
+        if no_triple and c.buzz.zero_range:
+            crit_lines.append(NO_TRIPLE_POINT)
+        chart.set_marker(crit.mfr, crit.recovery, "<br>".join(crit_lines))
+        if not c.valid:
+            lo, hi = crit.mfr - 0.05, crit.mfr + 0.03
+            chart.set_x_range((lo, hi))
+            chart.set_bands([(lo, crit.mfr, VALIDITY_BAND_TEXT)], token="warn")
+            chart.place_band_text()
+            self.char_takeaway.setText(T.characteristic(c))
+            self.char_caption.setText(
+                f"Flow behind the last ramp at M<sub>n</sub> {c.M_n:.3f}, below "
+                f"{MOECKEL_MIN_MACH:g}: Moeckel's method is not expected to be valid near Mach "
+                "1 (TN 1921 p. 14); the limit is the lowest two-dimensional Mach number at "
+                "which the report compares the method with experiment (fig. 7, p. 29).")
+            return
         if c.buzz is None:
+            chart.set_x_range((crit.mfr - 0.05, crit.mfr + 0.03))
             self.char_takeaway.setText(T.characteristic(c))
             self.char_caption.setText(c.note[:1].upper() + c.note[1:] + ".")
             return
-        tau_b = c.buzz.tau
+        onset = c.buzz.mfr
+        stable, shock_L = data.stable, data.shock_L
 
-        def sub_text(points):
-            def text(i):
-                p = points[i]
-                shock = api.moeckel_shock(d, off, p.tau) if p.tau else None
-                lines = ["Subcritical (approximate)", f"Throttle p<sub>x</sub>/p<sub>0∞</sub> "
-                         f"{p.p_exit:.4f}", f"Spilled fraction τ {p.tau:.3f}"]
-                if shock is not None:
-                    lines.append(f"Shock {shock.L / d.inputs.capture_height:.3f} × capture "
-                                 "height ahead of the lip (Moeckel)")
-                lines += [f"Recovery {p.recovery:.4f}", f"A0/Ac {p.mfr:.4f}"]
-                if p.tau >= tau_b:
-                    lines.append("past the buzz onset (Ferri–Nucci, approximate)")
-                return "<br>".join(lines)
-            return text
+        def sub_text(i):
+            p = stable[i]
+            lines = ["Subcritical (approximate)", f"Throttle p<sub>x</sub>/p<sub>0∞</sub> "
+                     f"{p.p_exit:.4f}", f"Spilled fraction τ {p.tau:.3f}"]
+            if shock_L[i] is not None:
+                lines.append(f"Shock {shock_L[i]:.3f} × capture height ahead of the lip "
+                             "(Moeckel)")
+            lines += [f"Recovery {p.recovery:.4f}", f"A0/Ac {p.mfr:.4f}"]
+            if i == len(stable) - 1:
+                lines.append("buzz onset (Ferri–Nucci, approximate)")
+                if no_triple:
+                    lines.append(NO_TRIPLE_POINT)
+            return "<br>".join(lines)
 
-        stable = [p for p in c.subcritical if p.tau <= tau_b]
-        if not stable or stable[-1].tau < tau_b:
-            stable = stable + [_point_at(c, tau_b, d.inputs.gamma)]
-        beyond = [stable[-1]] + [p for p in c.subcritical if p.tau > tau_b]
-        chart.set_series("sub", [p.mfr for p in stable], [p.recovery for p in stable],
-                         sub_text(stable), label="subcritical (approximate)", pickable=False)
-        chart.set_series("buzz", [p.mfr for p in beyond], [p.recovery for p in beyond],
-                         sub_text(beyond), label="beyond buzz onset (approximate)",
-                         pickable=False)
-        chart.set_vline(c.buzz.mfr, BUZZ_LINE_TEXT)
-        chart.set_bands([(min(p.mfr for p in beyond), c.buzz.mfr, BUZZ_BAND_TEXT)])
-        chart.plot.getPlotItem().enableAutoRange()
+        if len(stable) > 1:                       # zero range: the onset is the critical point
+            chart.set_series("sub", [p.mfr for p in stable], [p.recovery for p in stable],
+                             sub_text, label="subcritical (approximate)", pickable=False)
+        if c.buzz.zero_range:
+            lo, hi = crit.mfr - 0.05, crit.mfr + 0.05
+        else:
+            lo, hi = min(onset, crit.mfr) - 0.05, crit.mfr + 0.03
+        chart.set_x_range((lo, hi))
+        chart.set_vline(onset, BUZZ_LINE_TEXT)
+        chart.set_bands([(lo, onset, BUZZ_BAND_TEXT)])
         chart.place_band_text()
         self.char_takeaway.setText(T.characteristic(c))
-        parts = [f"Buzz onset A0/Ac {c.buzz.mfr:.4f} "
+        parts = [f"Buzz onset A0/Ac {onset:.4f} "
                  f"({'exact triple point' if c.buzz.exact_used else 'sheet along the region-n flow'}"
-                 f"); θ<sub>n</sub> fallback {c.buzz_fallback.mfr:.4f}."]
+                 f"); θ<sub>n</sub> fallback {c.buzz_fallback.mfr:.4f}. No steady solution "
+                 "past the onset."]
         if c.buzz.extrapolated:
             parts.append(EXTRAPOLATED_TEXT)
         parts.append("2D multi-ramp application of the criterion: Busemann extension.")
         self.char_caption.setText(" ".join(parts))
-        flagged = any(s.shock.startswith("ramp") and s.flagged for s in d.separation)
+        flagged = any(sh.shock.startswith("ramp") and sh.flagged for sh in d.separation)
         self.char_separation.setVisible(flagged)
-
-
-def _point_at(c, tau, gamma):
-    """The subcritical point at exactly tau (the buzz onset) on the ideal flat branch."""
-    from inletdesign import characteristic as _char
-
-    crit = c.critical
-    m_crit = _char.mass_flow_function(crit.M_exit, gamma)
-    M_x = _char.mach_from_mass_flow(m_crit * (1.0 - tau), gamma) if tau > 0 else crit.M_exit
-    return _char.CharPoint(mfr=crit.mfr * (1.0 - tau), recovery=crit.recovery,
-                           p_exit=crit.recovery * _char.p_over_pt(M_x, gamma), M_exit=M_x,
-                           tau=tau)
 
 
 def gap_label(reason):

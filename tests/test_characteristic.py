@@ -192,14 +192,44 @@ def test_stable_range_grows_as_the_shocks_move_ahead_of_the_lip(d):
 
 
 def test_buzz_onset_reports_both_methods_and_the_tested_range(d):
-    off = _off(d, 2.5)
+    off = _off(d, 2.6)
     e, f = C.buzz_onset(d, off, "exact"), C.buzz_onset(d, off, "fallback")
     assert e.method == "exact" and f.method == "fallback"
-    assert e.tau > 0.0 and f.tau > 0.0 and not e.extrapolated           # M 2.5 within 1.9-2.7
+    assert e.tau > 0.0 and f.tau > 0.0 and not e.extrapolated           # M 2.6 within 1.9-2.7
     assert e.mfr == pytest.approx(off.mass_capture_ratio * (1.0 - e.tau), rel=1e-12)
     # at the onset the sheet passes through the lip (side ~ 0)
     side, T, theta, _ = C._sheet_state(d, off, e.tau, "exact", {})
     assert abs(side) < 1e-6 * d.inputs.capture_height
+
+
+# --- validity of Moeckel's method (TN 1921 p. 14; limit from fig. 7, p. 29) ------------------
+
+def _M_n(off):
+    return off.regions[len(off.ramp_angles_deg)].M
+
+
+def test_below_the_validity_limit_nothing_subcritical_is_computed(d):
+    off = _off(d, 2.5)
+    assert 1.0 < _M_n(off) < C.MOECKEL_MIN_MACH
+    c = C.inlet_characteristic(d, off, 2.0)
+    assert not c.valid and c.buzz is None and c.buzz_fallback is None
+    assert c.subcritical == () and c.note == C.OUTSIDE_VALIDITY_NOTE
+    assert c.M_n == pytest.approx(_M_n(off), rel=1e-15)
+    assert c.supercritical and c.critical.mfr == pytest.approx(off.mass_capture_ratio)
+    for method in ("exact", "fallback"):
+        with pytest.raises(ValueError, match="validity"):
+            C.buzz_onset(d, off, method)
+
+
+def test_validity_follows_the_region_n_mach_number(d):
+    """Self-consistency: the characteristic is valid exactly where M_n >= the limit; the
+    validation design crosses M_n = 1.2 between M 2.57 and 2.575."""
+    for M in (2.45, 2.55, 2.57, 2.575, 2.6, 2.75, 3.0):
+        off = _off(d, M)
+        c = C.inlet_characteristic(d, off, 2.0)
+        assert c.valid == (_M_n(off) >= C.MOECKEL_MIN_MACH), M
+        assert (c.buzz is not None) == c.valid, M
+    assert _M_n(_off(d, 2.57)) < C.MOECKEL_MIN_MACH < _M_n(_off(d, 2.575))
 
 
 def test_characteristic_above_design_has_no_subcritical_model(d):

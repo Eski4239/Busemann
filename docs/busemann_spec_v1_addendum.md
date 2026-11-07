@@ -139,6 +139,14 @@ menus or windows, never extra rows on existing panels unless listed here.
    - Separation: a line under the chart and a Verification warning "Ramp separation
      reduces the buzz margin (approximate)" whenever the separation check flags a ramp
      shock. Not modelled above the design Mach (shock-in-duct).
+   - M9c.1: computed on a worker thread (debounced, stale results dropped, cached by design,
+     M∞ and area ratio; the GUI thread only draws, under 50 ms). Validity limit M_n ≥ 1.2
+     (TN 1921 p. 14; number from fig. 7, p. 29): below it a shaded band "outside the
+     method's validity …" and no buzz onset. x axis [min(onset, critical) − 0.05,
+     critical + 0.03] (±0.05 about the critical point when the range is zero); no recovery
+     curve past the onset, which is shaded "buzz (unsteady, approximate)"; where the
+     triple point has no regular solution the hover says "no regular triple point; vortex
+     sheet taken along θₙ".
 
 ## E. Verification notes export
 
