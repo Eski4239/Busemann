@@ -362,4 +362,33 @@ def test_gui_thread_never_computes_a_slot(qtbot, window, monkeypatch, tmp_path):
     _settle(qtbot, window)
     window.state.update(units="Imperial")                          # redraw from the cache
     assert calls["gui"] == [] and calls["worker"] > 0
+
+
+def test_narrow_width_stacks_a_above_b(qtbot, window):
+    from PySide6.QtWidgets import QBoxLayout
+
+    tab = _open(qtbot, window)
+    window.resize(1700, 900)
+    qtbot.wait(50)
+    assert tab.canvas_host.width() >= 900
+    assert tab.columns_layout.direction() == QBoxLayout.Direction.LeftToRight
+    window.resize(900, 900)
+    qtbot.wait(50)
+    assert tab.canvas_host.width() < 900
+    assert tab.columns_layout.direction() == QBoxLayout.Direction.TopToBottom
+    window.resize(1700, 900)
+    qtbot.wait(50)
+    assert tab.columns_layout.direction() == QBoxLayout.Direction.LeftToRight
+
+
+def test_narrow_width_overlay_still_works(qtbot, window):
+    tab = _open(qtbot, window)
+    _pin(qtbot, window)
+    _change(qtbot, window, n_ramps=3)
+    window.resize(700, 900)
+    qtbot.wait(50)
+    tab.overlay_button.click()
+    assert tab.overlay_on() and not tab.columns["A"].isVisibleTo(tab)
+    tab.overlay_button.click()
+    assert not tab.overlay_on() and tab.columns["A"].isVisibleTo(tab)
     assert inspect.isfunction(C.evaluate)

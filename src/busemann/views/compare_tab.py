@@ -14,7 +14,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPen
 from PySide6.QtWidgets import (
-    QAbstractItemView, QApplication, QFileDialog, QGraphicsPathItem, QHBoxLayout,
+    QAbstractItemView, QApplication, QBoxLayout, QFileDialog, QGraphicsPathItem, QHBoxLayout,
     QHeaderView, QLabel, QMessageBox, QPushButton, QSizePolicy, QSplitter, QStackedWidget,
     QTableWidget, QTableWidgetItem, QToolButton, QVBoxLayout, QWidget,
 )
@@ -37,6 +37,7 @@ EMPTY_A = "Nothing pinned — press Pin (P) on the Design tab, or Load into A…
 OVERLAY_TEXT = "A: dashed outline over B"
 CURVES_TEXT = "Off-design curves"
 COLUMNS = ("Metric", "A", "B", "Δ", "Δ%")
+STACK_WIDTH = 900
 
 
 class SlotView(QObject):
@@ -228,8 +229,10 @@ class CompareTab(QWidget):
         b.extra_bounds = lambda: self._bounds(a) if self.pinned is not None else None
         a.view_moved.connect(lambda: self._sync(a, b))
         b.view_moved.connect(lambda: self._sync(b, a))
+        self.columns_layout = columns
         canvas_host = QWidget()
         canvas_host.setLayout(columns)
+        self.canvas_host = canvas_host
 
         # --- KPI table ----------------------------------------------------------------------
         self.table = QTableWidget(0, len(COLUMNS))
@@ -603,6 +606,14 @@ class CompareTab(QWidget):
 
     def curves_expanded(self):
         return self.curves_toggle.isChecked()
+
+    @guarded()
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        target = (QBoxLayout.Direction.TopToBottom if self.canvas_host.width() < STACK_WIDTH
+                  else QBoxLayout.Direction.LeftToRight)
+        if self.columns_layout.direction() != target:
+            self.columns_layout.setDirection(target)
 
     # --- overlay and shared view -----------------------------------------------------------
     def set_overlay(self, on):
