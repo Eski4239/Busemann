@@ -26,26 +26,6 @@ from .widgets import divider
 from .crashlog import guarded
 
 
-def _placeholder(title, text, tip_key):
-    """A tab that is not built yet: a centred title and one muted line, nothing else."""
-    page = QWidget()
-    page.setObjectName("placeholderTab")
-    v = QVBoxLayout(page)
-    v.addStretch(1)
-    head = QLabel(title)
-    head.setObjectName("placeholderTitle")
-    head.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    line = QLabel(text)
-    line.setObjectName("muted")
-    line.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    for w in (head, line):
-        w.setToolTip(tip(tip_key))
-    v.addWidget(head)
-    v.addWidget(line)
-    v.addStretch(1)
-    return page
-
-
 def _side_panel(object_name, width, *widgets):
     body = QWidget()
     body.setObjectName("panelBody")
@@ -125,12 +105,13 @@ class MainWindow(QMainWindow):
         from .views.analytics_tab import AnalyticsTab
 
         self.analytics_tab = AnalyticsTab(self.state)
-        self.compare_tab = _placeholder(
-            "Compare", "Side-by-side design comparison — coming in M10.", "placeholder.compare")
+        from .views.compare_tab import CompareTab
+
+        self.compare_tab = CompareTab(self.state, self)
         self.tabs.addTab(self.analytics_tab, "Analytics")
         self.tabs.addTab(self.compare_tab, "Compare")
         self.tabs.setTabToolTip(2, tip("tab.analytics"))
-        self.tabs.setTabToolTip(3, tip("placeholder.compare"))
+        self.tabs.setTabToolTip(3, tip("tab.compare"))
         self.tabs.currentChanged.connect(self._on_tab)
 
         # centre column: banner (imported geometry, ...), view row (layer toggles), pages
@@ -288,6 +269,17 @@ class MainWindow(QMainWindow):
             self._view_row_layout.addWidget(button)            # row above the canvas
             self.layer_actions[name] = action
         self._view_row_layout.addStretch(1)
+        # Pin (Design tab only): freeze the current design into Compare slot A
+        self.pin_action = QAction("Pin", self)
+        self.pin_action.setShortcut(QKeySequence("P"))
+        self.pin_action.setToolTip(tip("toolbar.pin"))
+        self.pin_action.triggered.connect(lambda: self.compare_tab.pin_current())
+        self.addAction(self.pin_action)
+        self.pin_button = QToolButton()
+        self.pin_button.setObjectName("layerToggle")
+        self.pin_button.setDefaultAction(self.pin_action)
+        self.pin_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._view_row_layout.addWidget(self.pin_button)
 
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
@@ -328,6 +320,7 @@ class MainWindow(QMainWindow):
         for action in (self.zoom_in_action, self.zoom_out_action, self.fit_action):
             action.setVisible(on_canvas)        # zoom and fit act on a canvas only
         self.zoom_separator.setVisible(on_canvas)
+        self.pin_button.setVisible(self.tabs.currentWidget() is self.canvas)
         view = "offdesign" if self.tabs.currentWidget() is self.offdesign_tab else "design"
         self.state.set_active_view(view)
         canvas = self.current_canvas()
@@ -512,6 +505,7 @@ class MainWindow(QMainWindow):
         self._warm_timer.stop()
         self._stop_warm()                              # stop a running warm-up
         self.analytics_tab.shutdown()
+        self.compare_tab.shutdown()
         self.state.shutdown()
         super().closeEvent(event)
 

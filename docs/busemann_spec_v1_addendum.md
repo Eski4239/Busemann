@@ -156,10 +156,53 @@ the statement that all approximate results must be verified with a CFD solver.
 
 ## F. Compare view (M10)
 
-- "Pin" in the Design tab freezes the current design into slot A.
-- Compare tab: slot A (pinned or loaded design DXF) beside slot B (built live in the
-  tab with a compact input panel, or loaded). Side-by-side canvases, optional overlay
-  of outlines, KPI table with Δ and %, off-design curves of both on shared axes.
+No input panel in the Compare tab (revised in M10): slot B is the live design and the
+existing left panel drives it.
+
+- **Slot A** is a frozen deep copy of a complete design: every input and its api results.
+  It is created by:
+  - **"Pin"**, a button at the right of the Design tab's toolbar row, or the shortcut P;
+  - **"Load into A…"**: a Busemann DXF restores every input; a foreign DXF is imported
+    from its geometry with the current flight conditions, and A's header notes "imported
+    geometry — flight conditions unknown, current flight conditions used".
+
+  Pinning, or loading into A, asks before replacing an existing pin. **Unpin** clears A.
+  The pin is not part of the undo history and is never saved in DXF files. It survives
+  New and Open.
+- **Slot B** is the live design. "Load into B…" is File ▸ Open.
+- **"Swap A ↔ B":** the live design is pinned and A's inputs become the live design in one
+  inputs change, so one undo step. Undo restores the live side; the pin is not undone.
+- **Pure logic:** `busemann/compare.py` (no Qt) holds the snapshot, the slider-Mach
+  evaluation, the metric list, Δ = B − A, Δ% = 100 (B − A)/|A| and the better direction
+  of each metric.
+- **Layout:**
+  - **Header:** "A: <name or Pinned design> vs B: Current design"; Swap, Load into A/B,
+    Unpin, Overlay. When the flight conditions differ (M∞, p∞, T∞ or γ), a neutral note:
+    "A and B use different flight conditions".
+  - **Top:** two canvases with the same scale (each fits the union of both drawings), the
+    same Mach colour bins and legend (lowest region Mach to the higher M∞), and shared
+    zoom and pan. No dimension labels, no corner handles. "Overlay" shows one canvas with
+    A's walls and shocks as a thin dashed outline over B.
+  - **Middle:** the KPI table, A | B | Δ | Δ%.
+    - Input rows: M∞, altitude, p∞, T∞, ramps, method, each ramp angle, capture height,
+      width, cowl wedge.
+    - Result rows: total recovery; engine face vs MIL-E-5008B; mass capture; captured ṁ
+      (per span, and in total when a width is set); M after the terminal shock; cowl
+      angle; cowl margin; cowl drag coefficient at design; separation flags; stable
+      subcritical range at the off-design slider Mach (or "not computed").
+    - Δ is coloured ok/warn only by the metric's better direction, with a tooltip saying
+      why; other rows stay neutral. "Copy table" copies tab-separated text.
+  - **Bottom:** "Off-design curves", collapsed by default. Capture, recovery and cowl
+    margin of A (dashed) and B (solid) on shared M∞ axes, each with its own design-Mach
+    line.
+- **Worker:** every slot computation runs on the tab's own worker thread (120 ms
+  debounce, stale results dropped, cache by inputs and slider Mach, 64 entries). The GUI
+  thread only draws.
+- **Edge cases:**
+  - a ramp missing in one design shows "—";
+  - a detached or infeasible design greys its canvas with the error, and its Δ rows show
+    "—";
+  - a units switch converts both columns (Δ% unchanged).
 
 ## G. Isentropic ramp window (M11)
 

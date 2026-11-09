@@ -72,10 +72,12 @@ class InletCanvas(QGraphicsView):
     space_tapped = Signal()         # off-design canvas: Space pressed and released, no pan
     corner_drag_started = Signal(int)
     corner_drag_finished = Signal()
+    view_moved = Signal()           # zoom, pan or fit changed the view (Compare: shared view)
 
     def __init__(self, state, mode="design", parent=None):
         """mode "design": the shock-on-lip design; "offdesign": its frozen geometry at the
-        off-design slider Mach (state.off_design)."""
+        off-design slider Mach (state.off_design); "compare": a Compare slot (read-only, no
+        corner handles)."""
         super().__init__(parent)
         self.state = state
         self.mode = mode
@@ -112,6 +114,7 @@ class InletCanvas(QGraphicsView):
         self._from = self._target = self._shown = None
 
         self.animations_enabled = True
+        self.extra_bounds = None     # callable -> QRectF|None united into the fit (Compare)
         self.grid_visible = False
         self.error_text = None
         self.selection = (None, None)
@@ -204,7 +207,7 @@ class InletCanvas(QGraphicsView):
         new_states = self._shown is None or sk.regions is not self._shown.regions
         self.inlet_scene.set_picture(pic, self.state.inputs.units)
         self._shown = sk
-        r = self.inlet_scene.geometry_rect()
+        r = self._with_extra(self.inlet_scene.geometry_rect())
         pad = 20.0 * max(sk.h, 1.0)
         self.setSceneRect(r.adjusted(-pad, -pad, pad, pad))
         self.inlet_scene.layout_labels(self.scale_factor())
@@ -212,6 +215,10 @@ class InletCanvas(QGraphicsView):
         self.viewport().update()
         if new_states:
             self.picture_changed.emit()
+
+    def _with_extra(self, rect):
+        extra = self.extra_bounds() if self.extra_bounds is not None else None
+        return rect.united(extra) if extra is not None and not extra.isEmpty() else rect
 
     def region_states(self):
         """RegionState per drawn region, in canvas index order ([] before the first draw)."""
@@ -284,6 +291,7 @@ class InletCanvas(QGraphicsView):
             else:
                 self.inlet_scene.layout_labels(s)
                 rect = self.inlet_scene.geometry_rect(include_labels=True)
+            rect = self._with_extra(rect)
             s = tokens.CANVAS_FILL * min(avail.width() / max(rect.width(), 1e-9),
                                          avail.height() / max(rect.height(), 1e-9))
             s = min(max(s, _SCALE_LIMITS[0]), _SCALE_LIMITS[1])
@@ -294,6 +302,7 @@ class InletCanvas(QGraphicsView):
         if pic is None:
             self.inlet_scene.layout_labels(s)
             self.viewport().update()
+        self.view_moved.emit()
 
     def legend_visible(self):
         return self.inlet_scene.picture is not None and self.inlet_scene.layer_visible("regions")
@@ -331,6 +340,15 @@ class InletCanvas(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self._auto_fit = False
         self.inlet_scene.layout_labels(self.scale_factor())
+        self.view_moved.emit()
+
+    def follow(self, other):
+        """Show the same scale and centre as another canvas (Compare: shared zoom / pan)."""
+        self.setTransform(other.transform())
+        self.centerOn(other.mapToScene(other.viewport().rect().center()))
+        self._auto_fit = other._auto_fit
+        self.inlet_scene.layout_labels(self.scale_factor())
+        self.viewport().update()
 
     def zoom_in(self):
         self.zoom(_ZOOM_STEP ** 2, about_cursor=False)
@@ -695,6 +713,7 @@ class InletCanvas(QGraphicsView):
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - round(delta.x()))
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - round(delta.y()))
             self._auto_fit = False
+            self.view_moved.emit()
             event.accept()
             return
         self._hover(event.position())

@@ -12,9 +12,8 @@ pytestmark = pytest.mark.gui
 def test_tabs_and_placeholders(window):
     assert [window.tabs.tabText(i) for i in range(4)] == ["Design", "Off-design", "Analytics",
                                                           "Compare"]
-    from PySide6.QtWidgets import QLabel
-    labels = [lab.text() for lab in window.compare_tab.findChildren(QLabel)]
-    assert any("coming in M10" in t for t in labels)                  # Compare: placeholder
+    from busemann.views.compare_tab import CompareTab
+    assert isinstance(window.compare_tab, CompareTab)                # Compare: M10
     from busemann.views.analytics_tab import AnalyticsTab
     assert isinstance(window.analytics_tab, AnalyticsTab)            # Analytics: M9a
 

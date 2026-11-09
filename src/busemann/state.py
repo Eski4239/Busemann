@@ -17,23 +17,16 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from inletdesign import api
 
 from .inputs import Inputs, freestream_for, preset_changes, sized_capture_height  # noqa: F401
+from .inputs import (  # noqa: F401
+    OFF_DESIGN_MIN_MACH, OFF_DESIGN_SPAN, SWEEP_POINTS, design_sweep, off_design_range,
+)
 from .crashlog import guarded
 from .theme import tokens
-
-OFF_DESIGN_MIN_MACH = 1.2        # off-design slider lower end
-OFF_DESIGN_SPAN = 1.5            # slider upper end = design Mach + this
-SWEEP_POINTS = 40
-
 
 # Fields that do not change any computed result.
 _DISPLAY_ONLY = {"units", "preset", "cowl_frontal_height", "diffuser_area_ratio"}  # analytics only
 # Fields evaluated on the frozen design by the light off-design job.
 _OFF_DESIGN_ONLY = {"off_design_mach"}
-
-
-def off_design_range(design_mach):
-    """(min, max) of the off-design Mach slider for a design Mach."""
-    return OFF_DESIGN_MIN_MACH, round(design_mach + OFF_DESIGN_SPAN, 10)
 
 
 def _off_point(design, mach):
@@ -101,9 +94,7 @@ class _DesignJob(QRunnable):
             out["off"], out["off_error"] = _off_point(d, off_mach)
             if d.inputs.n_ramps > 0:          # no off-design model without ramps
                 t1 = time.perf_counter()
-                lo, hi = off_design_range(d.inputs.M)
-                m_det = api.detachment_mach(d)
-                out["sweep"] = api.off_design_sweep(d, max(lo, m_det), hi, SWEEP_POINTS)
+                out["sweep"] = design_sweep(d)
                 out["sweep_ms"] = (time.perf_counter() - t1) * 1000.0
                 if i.capture_mode == "mass_flow" and i.mdot_kgps and i.inlet_width_m:
                     out["demand"] = _demand(i, out["sweep"].machs, d.inputs.capture_height)

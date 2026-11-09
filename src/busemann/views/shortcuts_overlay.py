@@ -11,6 +11,7 @@ from ..crashlog import guarded
 SHORTCUTS = (
     ("F", "Fit the drawing"),
     ("E", "Explain drawer"),
+    ("P", "Pin the design as Compare slot A"),
     ("Space", "Play / pause the Mach sweep (Off-design canvas or tab focused)"),
     ("1 – 4", "Design · Off-design · Analytics · Compare"),
     ("Ctrl+Z", "Undo"),

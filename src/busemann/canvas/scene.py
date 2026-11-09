@@ -151,6 +151,7 @@ class InletScene(QGraphicsScene):
         self._dim_items = []
         self.dim_labels = []          # Label items of the dimension layer, placement order
         self.mach_edges = [0.5, 1.0]
+        self.fixed_mach_range = None    # (lo, M∞) shared by two drawings (Compare), or None
         self.mach_colors = []
         self.continuous_range = None  # (lo, hi): continuous Mach colours (off-design view)
         self.label_rects = []         # placed label rects (model mm), after layout_labels
@@ -213,7 +214,8 @@ class InletScene(QGraphicsScene):
         while len(self.region_items) > len(pic.regions):
             self.removeItem(self.region_items.pop())
         machs = [r.state.M for r in pic.regions]
-        self.mach_edges = P.mach_bins(min(machs), pic.skeleton.regions[0].M)
+        lo, hi = self.fixed_mach_range or (min(machs), pic.skeleton.regions[0].M)
+        self.mach_edges = P.mach_bins(lo, hi)
         self.mach_colors = bin_colors(self.mach_edges)
         for item, region in zip(self.region_items, pic.regions):
             if self.continuous_range is not None:        # off-design view: continuous map

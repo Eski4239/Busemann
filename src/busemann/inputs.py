@@ -32,6 +32,9 @@ class Inputs:
 
 
 CAPTURE_MODES = ("height", "mass_flow")
+OFF_DESIGN_MIN_MACH = 1.2        # off-design slider lower end
+OFF_DESIGN_SPAN = 1.5            # slider upper end = design Mach + this
+SWEEP_POINTS = 40
 DEFAULT_WIDTH_M = 1.0                   # width used when sizing starts without one
 
 
@@ -60,3 +63,15 @@ def sized_capture_height(inputs, fs):
             and inputs.inlet_width_m:
         return api.capture_height_for_mass_flow(fs, inputs.mdot_kgps, inputs.inlet_width_m)
     return inputs.capture_height_m
+
+
+def off_design_range(design_mach):
+    """(min, max) of the off-design Mach slider for a design Mach."""
+    return OFF_DESIGN_MIN_MACH, round(design_mach + OFF_DESIGN_SPAN, 10)
+
+
+def design_sweep(design):
+    """The off-design sweep the app draws for a design: SWEEP_POINTS Machs from the
+    detachment Mach (or the slider's lower end) to the slider's upper end."""
+    lo, hi = off_design_range(design.inputs.M)
+    return api.off_design_sweep(design, max(lo, api.detachment_mach(design)), hi, SWEEP_POINTS)

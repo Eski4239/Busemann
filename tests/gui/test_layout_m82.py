@@ -27,7 +27,8 @@ def test_tabs_sit_in_the_toolbar_and_layers_above_the_canvas(window):
     assert bar.mapTo(window, bar.rect().topLeft()).x() < \
         window.explain_button.mapTo(window, window.explain_button.rect().topLeft()).x()
     layer_buttons = window.view_row.findChildren(QToolButton)
-    assert {b.defaultAction() for b in layer_buttons} == set(window.layer_actions.values())
+    assert {b.defaultAction() for b in layer_buttons} == (set(window.layer_actions.values())
+                                                          | {window.pin_action})  # M10 Pin
     assert not any(b.defaultAction() in window.layer_actions.values() for b in toolbar_buttons
                    if not window.view_row.isAncestorOf(b))
     bar.setCurrentIndex(1)
