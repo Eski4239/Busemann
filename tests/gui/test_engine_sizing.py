@@ -77,6 +77,7 @@ def test_mass_flow_card_shows_total_with_a_width(qtbot, window):
     assert "lbm/s/ft" in card.sub_label.text()
 
 
+@pytest.mark.ui
 def test_locked_mdot_says_set_a_width_first(qtbot, window):
     from busemann.views.design_panel import NO_WIDTH_TEXT
 
@@ -117,6 +118,7 @@ def test_off_design_supply_demand_chip_and_demand_line(qtbot, window):
     assert "fixed demand (engine matching not modelled)" in footer
 
 
+@pytest.mark.ui
 def test_supply_rows_hidden_in_height_mode(qtbot, window):
     tab = window.offdesign_tab
     window.tabs.setCurrentWidget(tab)

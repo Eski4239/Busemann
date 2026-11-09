@@ -74,6 +74,7 @@ def test_design_mach_view_curves_mil_and_cowl_chart(qtbot, window):
     assert "MIL-E-5008B" in tab.mach_chart.legend.text()
 
 
+@pytest.mark.ui
 def test_hover_shows_n_turning_recovery_and_ramps(qtbot, window):
     tab = _open(qtbot, window)
     chart = tab.turning_chart
@@ -176,6 +177,7 @@ def test_progressive_results_cache_and_stale_generations(qtbot, window):
     assert not tab.is_computing() and (3.0, 1.4) in tab._cache
 
 
+@pytest.mark.ui
 def test_no_raw_symbols_or_phase_names_in_analytics_text(qtbot, window):
     violations = _audit()
     tab = _open(qtbot, window)

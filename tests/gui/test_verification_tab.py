@@ -48,6 +48,7 @@ def test_every_geometry_and_cfd_export_writes_the_notes(qtbot, window, tmp_path,
     assert "must be verified with a CFD solver" in text
 
 
+@pytest.mark.ui
 def test_no_validation_phase_names_in_the_verification_tab(qtbot, window):
     """M8.4: every label and tooltip in the Verification and Results panels, at the design
     point and above the design Mach (lip notice)."""

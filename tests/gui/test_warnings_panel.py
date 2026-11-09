@@ -8,6 +8,7 @@ pytest.importorskip("pytestqt")
 pytestmark = pytest.mark.gui
 
 
+@pytest.mark.ui
 def test_only_the_five_cards(window):
     assert list(window.results_panel.cards) == ["recovery_total", "mass_capture", "mass_flow",
                                                 "M_duct", "cowl_margin"]
@@ -33,6 +34,7 @@ def test_banner_counts_warnings_and_scrolls_to_them(qtbot, window):
     assert scroll.verticalScrollBar().value() > 0                  # scrolled to the warnings
 
 
+@pytest.mark.ui
 def test_groups_and_collapsible_rows(qtbot, window):
     panel = window.results_panel
     assert panel.notice_groups() == ["At the design point (M∞ 3.00)"]
@@ -49,6 +51,7 @@ def test_groups_and_collapsible_rows(qtbot, window):
                                      "At M∞ 3.25 (off-design)"]
 
 
+@pytest.mark.ui
 def test_no_citations_or_cfd_comparisons_in_results(qtbot, window):
     panel = window.results_panel
     window.tabs.setCurrentWidget(window.offdesign_tab)
@@ -62,6 +65,7 @@ def test_no_citations_or_cfd_comparisons_in_results(qtbot, window):
         assert word not in text, word
 
 
+@pytest.mark.ui
 def test_flow_regions_heading_and_export_menu(window):
     from PySide6.QtWidgets import QLabel
 

@@ -74,6 +74,7 @@ def test_click_selects_region_and_fills_results_panel(qtbot, window):
     assert not canvas.inlet_scene.selection_item.isVisible()
 
 
+@pytest.mark.ui
 def test_fit_contains_all_geometry(qtbot, window):
     canvas = window.canvas
     canvas.zoom(8.0)
@@ -86,6 +87,7 @@ def test_fit_contains_all_geometry(qtbot, window):
     assert visible.contains(geometry)
 
 
+@pytest.mark.ui
 def test_wheel_zoom_and_f_key_fit(qtbot, window):
     canvas = window.canvas
     canvas.fit()
@@ -98,6 +100,7 @@ def test_wheel_zoom_and_f_key_fit(qtbot, window):
 
 
 @pytest.mark.parametrize("layer", ["shocks", "regions", "dimensions"])
+@pytest.mark.ui
 def test_layer_toggles_hide_items(qtbot, window, layer):
     canvas = window.canvas
     action = window.layer_actions[layer]
@@ -109,6 +112,7 @@ def test_layer_toggles_hide_items(qtbot, window, layer):
     assert items and all(not item.isVisible() for item in items)
 
 
+@pytest.mark.ui
 def test_grid_toggle(qtbot, window):
     window.layer_actions["grid"].setChecked(True)
     assert window.canvas.layer_visible("grid")
@@ -160,6 +164,7 @@ def test_animation_disabled_while_slider_dragged(qtbot, window):
     assert window.canvas.animations_enabled
 
 
+@pytest.mark.ui
 def test_units_switch_relabels_dimensions(qtbot, window):
     window.layer_actions["dimensions"].setChecked(True)
     window.state.update(units="Imperial")
@@ -168,6 +173,7 @@ def test_units_switch_relabels_dimensions(qtbot, window):
     assert any(t.startswith("hc") and t.endswith(" in") for t in texts)
 
 
+@pytest.mark.ui
 def test_section_labels_are_uppercase_with_tracking(window):
     from PySide6.QtGui import QFont
     from PySide6.QtWidgets import QLabel
@@ -183,6 +189,7 @@ def test_section_labels_are_uppercase_with_tracking(window):
 
 # --- M3.1 ----------------------------------------------------------------------------
 
+@pytest.mark.ui
 def test_region_colours_diverge_at_sonic(qtbot, window):
     scene = window.canvas.inlet_scene
     duct = scene.region_fill(len(scene.region_items) - 1)          # subsonic: warm sand
@@ -193,6 +200,7 @@ def test_region_colours_diverge_at_sonic(qtbot, window):
     assert item.pen().color().lightness() < item.brush().color().lightness()   # darker border
 
 
+@pytest.mark.ui
 def test_legend_card_top_right(window):
     canvas = window.canvas
     card = canvas.legend_rect()
@@ -201,6 +209,7 @@ def test_legend_card_top_right(window):
     assert canvas.available_rect().right() < card.left()
 
 
+@pytest.mark.ui
 def test_fit_fills_85_percent_of_limiting_dimension(qtbot, window):
     canvas = window.canvas
     canvas.fit()
@@ -212,6 +221,7 @@ def test_fit_fills_85_percent_of_limiting_dimension(qtbot, window):
     assert drawn.center().y() == pytest.approx(avail.center().y(), abs=2)
 
 
+@pytest.mark.ui
 def test_dimension_labels_do_not_collide_and_fit_includes_them(qtbot, window):
     from busemann.canvas import picture as Pm
 
@@ -265,6 +275,7 @@ def test_max_cowl_angle_constrains_design(qtbot, window):
     assert not window.state.design.constrained and not badge.isVisible()
 
 
+@pytest.mark.ui
 def test_ramp_table_replaces_angle_lists(window):
     table = window.design_panel.ramp_table
     d = window.state.design
@@ -275,6 +286,7 @@ def test_ramp_table_replaces_angle_lists(window):
     assert window.design_panel.readout.text("margin") == f"{d.cowl_margin_deg:+.2f}"
 
 
+@pytest.mark.ui
 def test_error_card_wraps_with_non_breaking_spaces(qtbot, window):
     with qtbot.waitSignal(window.state.design_ready, timeout=5000):
         window.state.update(method="custom", custom_angles=(12.0, 40.0))
@@ -284,6 +296,7 @@ def test_error_card_wraps_with_non_breaking_spaces(qtbot, window):
     assert overlay.height() >= overlay.heightForWidth(overlay.width())
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("wedge, noted", [(0.0, True), (6.0, False)])
 def test_cowl_hover_notes_thickened_drawing(qtbot, window, wedge, noted):
     if window.state.inputs.cowl_wedge_deg != wedge:
@@ -308,6 +321,7 @@ def test_wedge_field_in_advanced_drives_design(qtbot, window):
         api.design(3.0, 2).cowl_margin_deg - 6.0, abs=1e-12)
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("changes", [{}, {"n_ramps": 4}, {"mach": 6.7, "n_ramps": 4}])
 def test_mach_label_pill_never_clipped(qtbot, window, changes):
     if changes:
@@ -324,6 +338,7 @@ def test_mach_label_pill_never_clipped(qtbot, window, changes):
 SUBSONIC_MIN_DE, ADJACENT_MIN_DE, SHOCK_MIN_DE = 8.0, 5.0, 20.0
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("min_M, M_inf", [(0.3, 2.0), (0.699, 3.0), (0.628, 6.7), (0.62, 4.5),
                                           (0.9, 1.2), (0.5, 10.0)])
 def test_adjacent_mach_bins_are_distinguishable(min_M, M_inf):
@@ -340,6 +355,7 @@ def test_adjacent_mach_bins_are_distinguishable(min_M, M_inf):
         assert delta_e(tokens.COLORS["shock"], c) >= SHOCK_MIN_DE
 
 
+@pytest.mark.ui
 def test_one_notice_card_per_severity_in_order(qtbot, window):
     panel = window.results_panel
     panel._set_warnings([("design", "info", "a note", None),
@@ -355,6 +371,7 @@ def test_one_notice_card_per_severity_in_order(qtbot, window):
     assert panel.card_levels() == [] and not panel.warnings_box.isVisibleTo(window)
 
 
+@pytest.mark.ui
 def test_max_cowl_with_custom_angles_shows_info_card(qtbot, window):
     _set(qtbot, window, method="custom", custom_angles=(8.0, 9.0), max_cowl_enabled=True)
     panel = window.results_panel
@@ -364,6 +381,7 @@ def test_max_cowl_with_custom_angles_shows_info_card(qtbot, window):
     assert "ignored for custom angles" in note
 
 
+@pytest.mark.ui
 def test_screen_legend_uses_the_class_labels(window):
     from busemann.canvas import picture as P
 

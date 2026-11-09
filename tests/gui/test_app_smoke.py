@@ -22,6 +22,7 @@ def _type(qtbot, field, text):
     qtbot.keyClick(field.edit, Qt.Key.Key_Return)
 
 
+@pytest.mark.ui
 def test_app_starts_with_layout_and_kpis(window):
     assert window.windowTitle() == "Busemann — Untitled"
     assert window.minimumWidth() == 1280 and window.minimumHeight() == 800
@@ -52,6 +53,7 @@ def test_out_of_range_mach_is_reported_not_clamped(qtbot, window):
     assert window.state.inputs.mach == 3.0
 
 
+@pytest.mark.ui
 def test_x15_preset_shows_real_gas_warning(qtbot, window):
     with qtbot.waitSignal(window.state.design_ready, timeout=5000):
         window.flight_panel.preset.setCurrentText("X-15 record")
@@ -60,6 +62,7 @@ def test_x15_preset_shows_real_gas_warning(qtbot, window):
     assert window.results_panel.warnings_box.isVisibleTo(window)
 
 
+@pytest.mark.ui
 def test_units_toggle_relabels(qtbot, window):
     window.flight_panel.units.button("Imperial").click()
     assert window.state.inputs.units == "Imperial"
@@ -90,6 +93,7 @@ def test_custom_angle_detachment_shown_inline(qtbot, window):
     assert window.results_panel.cards["recovery_total"].text() == "—"
 
 
+@pytest.mark.ui
 def test_panels_collapse(window):
     window.toggle_left.trigger()
     assert not window.left_panel.isVisible()
@@ -99,6 +103,7 @@ def test_panels_collapse(window):
     assert window.left_panel.isVisible()
 
 
+@pytest.mark.ui
 def test_status_bar(window):
     # the start-up design may already be in the api cache from an earlier test
     text = window.compute_label.text()

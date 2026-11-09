@@ -25,6 +25,7 @@ def _design(qtbot, window, **changes):
         window.state.update(**changes)
 
 
+@pytest.mark.ui
 def test_file_menu_has_the_spec_actions(window):
     texts = [a.text().replace("&", "") for a in window.project.file_menu.actions()]
     assert texts[:2] == ["New", "Open…"]
@@ -135,7 +136,6 @@ def test_command_line_path_opens_project(qtbot, monkeypatch, tmp_path):
     monkeypatch.setattr(app_module.QApplication, "exec", lambda self: 0)
     assert app_module.main([str(path)]) == 0
     w = windows[0]
-    qtbot.addWidget(w)
     qtbot.waitUntil(lambda: w.state.inputs.mach == 2.8, timeout=3000)
     assert w.project.path.name == "case.dxf"
     w.project.ask_save = lambda: "discard"

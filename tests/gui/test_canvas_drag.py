@@ -53,6 +53,7 @@ def test_helpers():
     assert snap_angle(10.044, fine=True) == 10.04
 
 
+@pytest.mark.ui
 def test_handles_only_in_custom_mode(qtbot, window):
     assert window.canvas.corner_handles() == []
     assert window.offdesign_tab.canvas.corner_handles() == []
@@ -166,6 +167,7 @@ def test_recovery_and_gap_update_live(qtbot, custom):
     canvas.finish_corner_drag()
 
 
+@pytest.mark.ui
 def test_method_buttons_are_named_and_explained(window):
     method = window.design_panel.method
     assert method.button("oswatitsch").text() == "Optimum angles"

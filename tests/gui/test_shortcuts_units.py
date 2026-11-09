@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt  # noqa: E402
 pytestmark = pytest.mark.gui
 
 
+@pytest.mark.ui
 def test_tabs_and_placeholders(window):
     assert [window.tabs.tabText(i) for i in range(4)] == ["Design", "Off-design", "Analytics",
                                                           "Compare"]
@@ -42,6 +43,7 @@ def test_number_keys_switch_tabs_and_letters_trigger_actions(qtbot, window):
     assert check.isChecked() is not before
 
 
+@pytest.mark.ui
 def test_cheat_sheet(qtbot, window):
     qtbot.keyClick(window, Qt.Key.Key_Question, Qt.KeyboardModifier.ShiftModifier)
     overlay = window.shortcuts_overlay

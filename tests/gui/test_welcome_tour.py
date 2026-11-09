@@ -28,6 +28,7 @@ def welcome(qtbot):
     return dialog
 
 
+@pytest.mark.ui
 def test_sections_new_design_examples_recent(welcome):
     """M8.2: "New design" = validation case + blank; "Examples" = the four flight presets
     plus the bundled example designs, one list; "Recent"."""
@@ -117,7 +118,6 @@ def test_main_shows_welcome_unless_a_path_is_given(qtbot, monkeypatch, tmp_path)
                         lambda *a, **k: windows.append(real(*a, **k)) or windows[-1])
     assert app_module.main([]) == 0
     w = windows[-1]
-    qtbot.addWidget(w)
     assert shown == [1] and w.isVisible()
     qtbot.waitUntil(lambda: w.state.inputs.mach == 3.0 and w.state.inputs.preset == "XB-70",
                     timeout=3000)
@@ -125,7 +125,6 @@ def test_main_shows_welcome_unless_a_path_is_given(qtbot, monkeypatch, tmp_path)
     P.save(path, Inputs(mach=2.2), None)
     assert app_module.main([str(path)]) == 0
     w2 = windows[-1]
-    qtbot.addWidget(w2)
     assert shown == [1]                                  # not shown again for a path
     qtbot.waitUntil(lambda: w2.state.inputs.mach == 2.2, timeout=3000)
     for win in (w, w2):
@@ -137,6 +136,7 @@ def test_main_shows_welcome_unless_a_path_is_given(qtbot, monkeypatch, tmp_path)
 
 # --- tour -----------------------------------------------------------------------------------
 
+@pytest.mark.ui
 def test_tour_steps_highlight_their_targets(qtbot, window):
     tour = window.tour
     tour.start()
@@ -176,6 +176,7 @@ def test_skip_stores_done_and_help_reopens(qtbot, window):
 
 # --- M8 restyle ------------------------------------------------------------------------------
 
+@pytest.mark.ui
 def test_header_shows_the_3d_render(welcome):
     from busemann.paths import resource_path
 
@@ -185,6 +186,7 @@ def test_header_shows_the_3d_render(welcome):
     assert shown is not None and not shown.isNull()
 
 
+@pytest.mark.ui
 def test_cards_are_title_plus_mono_subtitle_and_focusable(qtbot, welcome):
     from busemann.theme import qt as theme
 
@@ -198,6 +200,7 @@ def test_cards_are_title_plus_mono_subtitle_and_focusable(qtbot, welcome):
     assert welcome.open_button.objectName() == "secondaryButton"
 
 
+@pytest.mark.ui
 def test_recent_empty_state(welcome):
     assert not welcome.recent_list.isVisibleTo(welcome)
     assert welcome.recent_empty.isVisibleTo(welcome)

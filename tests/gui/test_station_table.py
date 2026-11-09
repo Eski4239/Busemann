@@ -35,6 +35,7 @@ def test_rows_match_every_canvas_region(window):
     assert table.font().fixedPitch() or "Mono" in table.font().family()
 
 
+@pytest.mark.ui
 def test_canvas_click_highlights_row(qtbot, window):
     canvas = window.canvas
     region = canvas.inlet_scene.picture.regions[2]
@@ -100,6 +101,7 @@ def test_ratio_text_keeps_four_significant_digits():
         "1.000", "6.532", "12.61", "158.4", "469.2", "1234"]
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("changes", [{}, {"n_ramps": 4}, {"mach": 6.7, "n_ramps": 4},
                                      {"n_ramps": 0}, {"mach": 2.0, "n_ramps": 1}])
 def test_no_clipped_columns_at_1440x900(qtbot, window, changes):

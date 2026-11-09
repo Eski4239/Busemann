@@ -37,12 +37,14 @@ def _states(qtbot, window):
     yield "off-design tab"
 
 
+@pytest.mark.ui
 def test_no_visible_label_without_tooltip(qtbot, window):
     for state in _states(qtbot, window):
         qtbot.wait(50)
         assert _missing(window) == [], state
 
 
+@pytest.mark.ui
 def test_table_headers_chart_axes_and_actions_have_tooltips(window):
     table = window.results_panel.station_table
     for c in range(table.columnCount()):

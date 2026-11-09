@@ -40,6 +40,7 @@ def _wheel(widget, steps):
     QApplication.sendEvent(widget, ev)
 
 
+@pytest.mark.ui
 def test_every_advanced_numeric_field_is_a_spin_box(qtbot, window):
     panel = _advanced(qtbot, window)
     for name in ("max_cowl", "wedge", "diffuser"):
@@ -147,6 +148,7 @@ def test_unfocused_wheel_does_not_change_the_value(qtbot, window):
     assert field.value() == before
 
 
+@pytest.mark.ui
 def test_text_is_visible_while_typing(qtbot, window):
     """The M8.3 bug: the fields were 30 px wide, so the text scrolled out of view."""
     panel = _advanced(qtbot, window)

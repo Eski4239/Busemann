@@ -174,6 +174,7 @@ def test_buzz_verification_items(window):
     assert "Busemann extension" in info.source
 
 
+@pytest.mark.ui
 def test_characteristic_text_audit(qtbot, window):
     spec = importlib.util.spec_from_file_location(
         "text_audit", Path(__file__).resolve().parents[1] / "test_text_audit.py")
@@ -192,6 +193,7 @@ def test_characteristic_text_audit(qtbot, window):
     assert all(math.isfinite(x) for x in chart.series["super"]["x"])
 
 
+@pytest.mark.ui
 def test_text_below_the_validity_limit_passes_the_audit(qtbot, window):
     spec = importlib.util.spec_from_file_location(
         "text_audit", Path(__file__).resolve().parents[1] / "test_text_audit.py")

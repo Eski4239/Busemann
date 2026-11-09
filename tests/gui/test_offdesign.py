@@ -30,6 +30,7 @@ def _open_tab(qtbot, win):
     return win.offdesign_tab
 
 
+@pytest.mark.ui
 def test_tab_switch_sets_view_and_toolbar_target(qtbot, window):
     assert window.tabs.tabText(1) == "Off-design"
     tab = _open_tab(qtbot, window)
@@ -303,11 +304,13 @@ def test_warnings_grouped_by_design_point_and_slider_mach(qtbot, window):
     assert panel.notice_groups() == ["At the design point (M∞ 3.00)"]
 
 
+@pytest.mark.ui
 def test_status_bar_splits_design_and_sweep_time(window):
     import re
     assert re.fullmatch(r"design (cached|\d+ ms) · sweep \d+ ms", window.compute_label.text())
 
 
+@pytest.mark.ui
 def test_chart_legend_wraps_only_between_entries(qtbot, window):
     charts = _open_tab(qtbot, window).charts
     rows = {row for row, _ in charts.legend_entries}
@@ -320,6 +323,7 @@ def test_chart_legend_wraps_only_between_entries(qtbot, window):
         ) - 1
 
 
+@pytest.mark.ui
 def test_footer_wraps_only_between_entries_at_a_narrow_width(qtbot, window):
     """M8.2 follow-up: no mid-word breaks (e.g. inside MIL-E-5008B); a narrow footer row
     breaks only at entry boundaries."""

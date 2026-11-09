@@ -21,7 +21,14 @@ def _resource(*parts):
 
 
 def load_fonts():
-    """Register the bundled fonts with Qt. Returns the set of family names loaded."""
+    """Register the bundled fonts with Qt. Returns the set of family names loaded.
+
+    Idempotent: Qt's application font database is process-wide and has no "already
+    registered" check, so calling this more than once (e.g. once per MainWindow in tests)
+    would re-register every font each time, growing Qt's font database without bound.
+    """
+    if _loaded_families:
+        return set(_loaded_families)
     for name in _FONT_FILES:
         data = _resource("fonts", name).read_bytes()
         font_id = QFontDatabase.addApplicationFontFromData(QByteArray(data))

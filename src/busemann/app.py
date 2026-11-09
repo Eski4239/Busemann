@@ -54,6 +54,11 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.warm_futures = []
         self.state = state or AppState(parent=self)
+        # close() only hides a QWidget by default; without this, every lambda connected to a
+        # signal in this method that captures `self` would keep the whole window alive for the
+        # rest of the process (only ever matters where a window is closed but the process keeps
+        # running, e.g. one pytest session creating hundreds of MainWindows).
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Busemann")
         self.setWindowIcon(theme.icon("busemann", "accent", 64))
         self.setMinimumSize(*tokens.MIN_WINDOW)
@@ -204,9 +209,7 @@ class MainWindow(QMainWindow):
         self.state.design_ready.connect(lambda *_: self._warm_timer.start())
         # any input change (e.g. a slider drag) stops a running warm-up at once
         self.state.inputs_changed.connect(lambda *_: self._stop_warm())
-        app = QApplication.instance()
-        if app is not None:
-            app.aboutToQuit.connect(_warm.shutdown)
+        # the aboutToQuit -> warm.shutdown connection is made once in setup_application()
 
         self.state.busy_changed.connect(self.busy.setVisible)
         self.state.compute_time_changed.connect(lambda _ms: self._update_status())
@@ -510,6 +513,9 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
 
+_warm_shutdown_connected = False
+
+
 def setup_application(app):
     app.setApplicationName("Busemann")
     app.setApplicationVersion(__version__)
@@ -517,6 +523,10 @@ def setup_application(app):
     from .gc_guard import install as install_gc_guard
 
     install_gc_guard(app)          # cyclic GC on the GUI thread only (worker-thread crash)
+    global _warm_shutdown_connected
+    if not _warm_shutdown_connected:
+        app.aboutToQuit.connect(_warm.shutdown)
+        _warm_shutdown_connected = True
     return app
 
 

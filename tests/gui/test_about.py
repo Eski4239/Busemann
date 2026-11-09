@@ -10,6 +10,7 @@ import re  # noqa: E402
 pytestmark = pytest.mark.gui
 
 
+@pytest.mark.ui
 def test_about_dialog_sections(qtbot, window):
     from busemann.views import about_dialog as A
 
@@ -42,12 +43,14 @@ def test_about_dialog_sections(qtbot, window):
     dialog.close()
 
 
+@pytest.mark.ui
 def test_help_menu_has_about(window):
     menus = [a.text().replace("&", "") for a in window.menuBar().actions()]
     assert menus == ["File", "Edit", "Help"]
     assert window.about_action.text().replace("&", "") == "About Busemann…"
 
 
+@pytest.mark.ui
 def test_about_text_is_plain():
     import re
 
@@ -62,6 +65,7 @@ def test_about_text_is_plain():
     assert A.ABOUT_TEXT.count(". ") + 1 <= 3                      # 2-3 sentences
 
 
+@pytest.mark.ui
 def test_about_window_uses_the_tokens(qtbot, window):
     from busemann.theme import tokens
 

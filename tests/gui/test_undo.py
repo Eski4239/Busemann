@@ -83,6 +83,7 @@ def test_open_and_new_clear_history(qtbot, window, tmp_path):
     assert window.undo.stack.count() == 0 and not window.undo.stack.canRedo()
 
 
+@pytest.mark.ui
 def test_edit_menu_and_shortcuts(window):
     texts = [a.text().replace("&", "") for a in window.menuBar().actions()]
     assert texts[:2] == ["File", "Edit"]

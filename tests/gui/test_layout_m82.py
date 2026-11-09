@@ -17,6 +17,7 @@ from busemann.views import offdesign_tab as OT  # noqa: E402
 pytestmark = pytest.mark.gui
 
 
+@pytest.mark.ui
 def test_tabs_sit_in_the_toolbar_and_layers_above_the_canvas(window):
     bar = window.tabs.tabBar()
     assert bar.parentWidget() is window.toolbar or window.toolbar.isAncestorOf(bar)
@@ -35,12 +36,14 @@ def test_tabs_sit_in_the_toolbar_and_layers_above_the_canvas(window):
     assert window.tabs.currentWidget() is window.offdesign_tab
 
 
+@pytest.mark.ui
 def test_offdesign_tab_tooltip_and_subtitle(window):
     sentence = "How this fixed inlet performs at other flight Mach numbers"
     assert window.tabs.tabToolTip(1).startswith(sentence)
     assert window.offdesign_tab.subtitle.text() == sentence
 
 
+@pytest.mark.ui
 def test_charts_collapsed_by_default_and_larger_when_expanded(qtbot, window):
     tab = window.offdesign_tab
     window.tabs.setCurrentWidget(tab)
@@ -94,6 +97,7 @@ def test_continuous_map_is_diverging_and_monotonic():
     assert all(sum(b) <= sum(a) + 1e-9 for a, b in zip(sup, sup[1:]))    # darker above
 
 
+@pytest.mark.ui
 def test_loop_button_is_an_icon(window):
     loop = window.offdesign_tab.playback_controls.loop_button
     assert loop.text() == "" and not loop.icon().isNull()
@@ -139,6 +143,7 @@ def test_new_constants_are_used():
     assert OT.SUBTITLE.startswith("How this fixed inlet")
 
 
+@pytest.mark.ui
 def test_continuous_legend_fits_a_short_canvas(qtbot, window):
     tab = window.offdesign_tab
     window.tabs.setCurrentWidget(tab)

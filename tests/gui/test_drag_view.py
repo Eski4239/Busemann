@@ -161,6 +161,7 @@ def test_verification_item_and_notes(window, tmp_path):
     assert item.title in text and item.text in text
 
 
+@pytest.mark.ui
 def test_drag_text_has_no_raw_symbols():
     spec = importlib.util.spec_from_file_location(
         "text_audit", Path(__file__).resolve().parents[1] / "test_text_audit.py")

@@ -30,6 +30,7 @@ def _click(drawer, key):
     drawer.tree.itemClicked.emit(item, 0)
 
 
+@pytest.mark.ui
 def test_explain_forces_the_right_column_open_and_locks_its_toggle(qtbot, window):
     window.toggle_right.setChecked(False)
     assert not window.right_column.isVisible()
@@ -42,6 +43,7 @@ def test_explain_forces_the_right_column_open_and_locks_its_toggle(qtbot, window
     assert window.right_column.currentWidget() is window.right_panel
 
 
+@pytest.mark.ui
 def test_tree_lists_the_topics_in_order(qtbot, window):
     drawer = _open(qtbot, window)
     assert _labels(drawer) == [
@@ -54,6 +56,7 @@ def test_tree_lists_the_topics_in_order(qtbot, window):
         f"Ramp shock {k}" for k in range(1, 5)]
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("key, entry", [
     (("item", "shock", 0), "oblique_shock"), (("item", "shock", 2), "normal_shock"),
     (("item", "region", 0), "freestream"), (("item", "region", 1), "region"),
@@ -122,6 +125,7 @@ def test_cowl_on_off_design_tab_uses_local_rule(qtbot, window):
     assert shown["off.cowl_required_turn_deg"] == "6.00"
 
 
+@pytest.mark.ui
 def test_popup_never_covers_the_tree(qtbot, window):
     from PySide6.QtCore import QRect
 
@@ -170,6 +174,7 @@ def test_gui_thread_never_renders_mathtext_during_a_drag(qtbot, window, monkeypa
     assert drawer.rendered.title == "Cowl lip at M∞ 2.89"
 
 
+@pytest.mark.ui
 def test_popup_text_as_displayed_has_no_raw_symbols(qtbot, window):
     """M8.2 follow-up: audit the exact plain text the popup shows (sources included) for
     every topic of the tree, with the forbidden-token list of tests/test_text_audit.py."""
@@ -197,6 +202,7 @@ def test_popup_text_as_displayed_has_no_raw_symbols(qtbot, window):
     assert "M₁ sin β" in shown and "M₂ sin(β − θ)" in shown and "sin(beta" not in shown
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("kind, index", [("region", 0), ("region", 3), ("shock", 0),
                                          ("shock", 2), ("cowl", 0)])
 def test_popup_never_covers_the_selected_canvas_item(qtbot, window, kind, index):
@@ -214,6 +220,7 @@ def test_popup_never_covers_the_selected_canvas_item(qtbot, window, kind, index)
     assert not popup.intersects(tree)
 
 
+@pytest.mark.ui
 def test_popup_is_a_movable_token_styled_tool_window(qtbot, window):
     from PySide6.QtCore import Qt
 
@@ -229,6 +236,7 @@ def test_popup_is_a_movable_token_styled_tool_window(qtbot, window):
         tokens.COLORS["surface"].lower() or bg == tokens.COLORS["surface"].lower()
 
 
+@pytest.mark.ui
 def test_topic_tree_style(qtbot, window):
     drawer = _open(qtbot, window)
     qtbot.wait(50)

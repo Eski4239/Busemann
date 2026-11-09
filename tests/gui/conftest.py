@@ -1,4 +1,6 @@
+import gc
 import os
+import weakref
 
 import pytest
 
@@ -41,16 +43,23 @@ def window(qtbot):
 
     setup_application(QApplication.instance())
     win = MainWindow()
-    # pytest-qt closes widgets before fixture teardown: never block on the save prompt
-    win.project.ask_save = lambda: "discard"
-    qtbot.addWidget(win)
+    win.project.ask_save = lambda: "discard"      # never block on the save prompt
     win.resize(1440, 900)
     win.show()
     qtbot.waitUntil(lambda: win.state.design is not None, timeout=5000)
+    ref = weakref.ref(win)
     yield win
     win.project.ask_save = lambda: "discard"      # never block on the save prompt
-    win.close()                                   # stops the equation warm-up
+    win.close()                                   # stops the equation warm-up, deferred-deletes win
     win.state.shutdown()
     from PySide6.QtCore import QThreadPool
 
     QThreadPool.globalInstance().waitForDone(10000)
+    del win
+    QApplication.instance().processEvents()       # let the deferred WA_DeleteOnClose delete run
+    gc.collect()
+    survivor = ref()
+    import shiboken6
+
+    assert survivor is None or not shiboken6.isValid(survivor), (
+        "MainWindow survived test teardown (leak)")

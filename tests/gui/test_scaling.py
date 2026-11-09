@@ -18,6 +18,7 @@ pytestmark = pytest.mark.gui
 PROBE = Path(__file__).with_name("scaling_probe.py")
 
 
+@pytest.mark.ui
 @pytest.mark.parametrize("scale", ["1.25", "1.5"])
 def test_main_window_not_clipped_at_display_scale(window, scale):
     # `window` fixture only to reuse its platform-availability skip
@@ -31,6 +32,7 @@ def test_main_window_not_clipped_at_display_scale(window, scale):
     assert result["problems"] == []
 
 
+@pytest.mark.ui
 def test_probe_detects_a_clipped_widget(qtbot):
     from PySide6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
