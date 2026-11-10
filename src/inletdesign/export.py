@@ -61,3 +61,33 @@ def write_geometry(doc, geom, include_shocks=True):
     if include_shocks:
         for p0, p1 in geom.shocks:
             msp.add_line(_to_mm(p0), _to_mm(p1), dxfattribs={"layer": "SHOCKS"})
+
+
+ISENTROPIC_FORMAT = "busemann-isentropic-dxf"
+ISENTROPIC_SCHEMA = 1
+
+
+def export_isentropic_dxf(ramp, path, metadata=None):
+    """Export an isentropic_ramp.IsentropicRamp wall contour as a DXF (R2010, millimetres).
+
+    The header carries BUSEMANN_FORMAT = "busemann-isentropic-dxf" (distinct from the main
+    design's "busemann-dxf") plus every input needed to rebuild the fan (M_inf, gamma, h_c,
+    delta_deg), so the main window's Open routes this file to the isentropic ramp window
+    instead of importing it as a multi-ramp design. Returns path."""
+    doc = ezdxf.new(dxfversion="R2010")
+    header = dict(metadata or {})
+    header.update({
+        "BUSEMANN_FORMAT": ISENTROPIC_FORMAT,
+        "BUSEMANN_SCHEMA": ISENTROPIC_SCHEMA,
+        "BUSEMANN_M_INF": ramp.M_inf,
+        "BUSEMANN_GAMMA": ramp.gamma,
+        "BUSEMANN_CAPTURE_HEIGHT": ramp.capture_height,
+        "BUSEMANN_DELTA_DEG": ramp.delta_deg,
+    })
+    write_metadata(doc, header)
+    doc.header["$INSUNITS"] = 4  # mm
+    doc.layers.add("WALL", color=7)
+    msp = doc.modelspace()
+    msp.add_lwpolyline([_to_mm(p) for p in ramp.wall_points], dxfattribs={"layer": "WALL"})
+    doc.saveas(path)
+    return path

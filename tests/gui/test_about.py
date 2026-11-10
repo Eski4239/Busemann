@@ -46,7 +46,7 @@ def test_about_dialog_sections(qtbot, window):
 @pytest.mark.ui
 def test_help_menu_has_about(window):
     menus = [a.text().replace("&", "") for a in window.menuBar().actions()]
-    assert menus == ["File", "Edit", "Help"]
+    assert menus == ["File", "Edit", "Tools", "Help"]
     assert window.about_action.text().replace("&", "") == "About Busemann…"
 
 

@@ -63,3 +63,25 @@ def test_opening_and_closing_many_windows_does_not_leak(qtbot):
     assert len(font_calls) == 0, (
         f"load_fonts() re-registered fonts after the first setup_application() call "
         f"({len(font_calls)} extra QFontDatabase.addApplicationFontFromData calls)")
+
+
+def test_isentropic_ramp_window_does_not_leak(qtbot, window):
+    """M11: IsentropicRampWindow sets WA_DeleteOnClose like MainWindow; opening and closing
+    several must not leave any of them (or their worker jobs) alive."""
+    from PySide6.QtWidgets import QApplication
+
+    from busemann.views.isentropic_ramp_window import IsentropicRampWindow
+
+    app = QApplication.instance()
+    for _ in range(BATCH):
+        win = IsentropicRampWindow(window)
+        win.show()
+        qtbot.waitUntil(lambda: win.canvas.ramp is not None, timeout=5000)
+        ref = weakref.ref(win)
+        win.close()
+        del win
+        app.processEvents()
+        gc.collect()
+        survivor = ref()
+        assert survivor is None or not shiboken6.isValid(survivor), (
+            "an IsentropicRampWindow survived close() + gc.collect()")

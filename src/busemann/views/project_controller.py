@@ -173,11 +173,34 @@ class ProjectController(QObject):
                 return False
         return self.open_path(path, ask=False)
 
+    def _open_as_isentropic(self, path):
+        """If `path` is an isentropic-ramp DXF (M11), load it into the Tools > Isentropic
+        ramp window and return True; otherwise return False without side effects."""
+        try:
+            doc = P._read_doc(path)
+        except P.ProjectError:
+            return False
+        header = P.custom_header(doc)
+        from inletdesign.export import ISENTROPIC_FORMAT
+
+        if header.get("BUSEMANN_FORMAT") != ISENTROPIC_FORMAT:
+            return False
+        win = self.window.show_isentropic_ramp()
+        win.load_from_header(header)
+        self._add_recent(path)
+        self.settings.setValue("project/last_dir", str(path.parent))
+        return True
+
     def open_path(self, path, ask=True):
-        """Open a project file (command line, drop, recent). Errors show a dialog."""
+        """Open a project file (command line, drop, recent). Errors show a dialog.
+
+        An isentropic-ramp DXF (BUSEMANN_FORMAT = "busemann-isentropic-dxf", M11) is routed to
+        the Tools > Isentropic ramp window instead of being imported as a multi-ramp design."""
         if ask and not self.maybe_save():
             return False
         path = Path(path)
+        if self._open_as_isentropic(path):
+            return True
         try:
             loaded = P.load(path, base=self.state.inputs)
         except P.ProjectError as exc:

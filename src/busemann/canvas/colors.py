@@ -46,6 +46,11 @@ def _ramp(stops, t):
     return mix(stops[k], stops[k + 1], t - k)
 
 
+def ramp(stops, t):
+    """Linear colour ramp across `stops` (hex strings), t in [0, 1] clamped at the ends."""
+    return _ramp(stops, t)
+
+
 def continuous(M, lo, hi):
     """Off-design canvas fill: continuous diverging map with the break at M = 1 (sub: from
     MACH_CONTINUOUS_SUB[0] at M = 1 to [-1] at lo; super: [0] at M = 1 to [-1] at hi)."""

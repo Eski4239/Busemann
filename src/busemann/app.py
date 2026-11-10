@@ -167,6 +167,8 @@ class MainWindow(QMainWindow):
         self.exports = ExportController(self, self.project.export_menu)
         self.results_panel.set_export_menu(self.project.export_menu)   # same actions
         self._build_edit_menu()
+        self._build_tools_menu()
+        self.isentropic_window = None
         help_menu = self.menuBar().addMenu("&Help")
         self.help_menu = help_menu
         self._build_shortcuts(help_menu)
@@ -426,6 +428,24 @@ class MainWindow(QMainWindow):
         self.addAction(self.undo_action)
         self.addAction(self.redo_action)
 
+    def _build_tools_menu(self):
+        menu = self.menuBar().addMenu("&Tools")
+        self.tools_menu = menu
+        self.isentropic_action = menu.addAction("&Isentropic ramp…")
+        self.isentropic_action.triggered.connect(self.show_isentropic_ramp)
+
+    def show_isentropic_ramp(self):
+        import shiboken6
+
+        from .views.isentropic_ramp_window import IsentropicRampWindow
+
+        if self.isentropic_window is None or not shiboken6.isValid(self.isentropic_window):
+            self.isentropic_window = IsentropicRampWindow(self)
+        self.isentropic_window.show()
+        self.isentropic_window.raise_()
+        self.isentropic_window.activateWindow()
+        return self.isentropic_window
+
     def show_about(self):
         from .views.about_dialog import AboutDialog
 
@@ -510,6 +530,11 @@ class MainWindow(QMainWindow):
         self.analytics_tab.shutdown()
         self.compare_tab.shutdown()
         self.state.shutdown()
+        if self.isentropic_window is not None:
+            import shiboken6
+
+            if shiboken6.isValid(self.isentropic_window):
+                self.isentropic_window.close()
         super().closeEvent(event)
 
 

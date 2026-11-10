@@ -64,3 +64,24 @@ def export_gmsh_geo(geom, path, metadata=None, lc=None):
         out.append(f'Physical Curve("{name.upper()}") = {{{", ".join(map(str, lines))}}};')
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
     return path
+
+
+def export_isentropic_geo(ramp, path, metadata=None, lc=None):
+    """Gmsh geometry script for an isentropic_ramp.IsentropicRamp wall contour: Point / Line
+    in metres with one Physical Curve "WALL" (same convention as export_gmsh_geo; the lip and
+    the fan's characteristics are not meshed, only the wall)."""
+    path = Path(path)
+    lc = lc or ramp.capture_height / 50.0
+    out = [f"// {line}" for line in _comment_lines(metadata)]
+    out += ["// units: m", f"lc = {lc!r};"]
+    ids = []
+    for point_id, (x, y) in enumerate(ramp.wall_points, start=1):
+        out.append(f"Point({point_id}) = {{{x!r}, {y!r}, 0, lc}};")
+        ids.append(point_id)
+    lines = []
+    for line_id, (a, b) in enumerate(zip(ids, ids[1:]), start=1):
+        out.append(f"Line({line_id}) = {{{a}, {b}}};")
+        lines.append(line_id)
+    out.append(f'Physical Curve("WALL") = {{{", ".join(map(str, lines))}}};')
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return path
