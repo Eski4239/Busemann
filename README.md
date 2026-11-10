@@ -21,6 +21,19 @@ pip install -r requirements.txt
 pytest
 ```
 
+### Running tests
+
+Plain `pytest` runs a fast local default: the physics/CLI core plus the GUI tests that check
+program correctness (threading, undo, file round-trips, validated numbers). GUI tests that only
+check what a user sees immediately (label text, pixel geometry, styling) are marked
+`@pytest.mark.ui` and skipped locally by default, same as the `perf`-marked timing tests. To run
+everything, matching CI:
+
+```powershell
+pytest -m "not perf"   # everything except timing-sensitive perf tests
+pytest -m ""            # literally everything
+```
+
 ## Quick start
 
 After `pip install -e .`, the `inletdesign` command is available on the PATH (inside the venv).

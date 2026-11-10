@@ -36,10 +36,14 @@ busemann = [
     "resources/explain/*.json",
     "resources/licenses/*.txt",
     "resources/licenses/*.json",
+    "resources/examples/*.dxf",
+    "resources/images/*.png",
 ]
 
 [tool.pytest.ini_options]
+addopts = "-m \"not perf and not ui\""
 markers = [
     "gui: GUI smoke tests (pytest-qt); skipped when PySide6 or a display is unavailable",
     "perf: performance targets (median timings, generous limits)",
+    "ui: user-visible-only GUI checks (text, pixel geometry, styling); CI runs these, local default does not",
 ]
