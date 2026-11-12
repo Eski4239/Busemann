@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool,
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QButtonGroup, QCheckBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
-    QRadioButton, QSizePolicy, QVBoxLayout, QWidget,
+    QRadioButton, QVBoxLayout, QWidget,
 )
 
 from ..canvas import colors as _colors
@@ -78,7 +78,6 @@ class _FanCanvas(QWidget):
         self.setMinimumSize(320, 320)
         self.ramp = None
         self.hover_card = HoverCard(parent if parent is not None else self)
-        self._transform = None          # (scale, origin) world -> widget
 
     def set_ramp(self, ramp):
         self.ramp = ramp

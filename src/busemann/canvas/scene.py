@@ -17,7 +17,6 @@ from . import picture as P
 from ..crashlog import guarded
 
 LAYERS = ("regions", "walls", "shocks", "streamtube", "dimensions", "annotations", "selection")
-TOGGLEABLE = ("shocks", "regions", "dimensions", "grid")
 _Z = {name: i for i, name in enumerate(LAYERS)}
 BOW_SHOCK_TOOLTIP = ("Illustrative only: the external cowl shock is detached, so a bow shock "
                      "stands ahead of the lip. Its position and the spillage/drag it causes "

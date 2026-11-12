@@ -16,10 +16,8 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 
 from inletdesign import api
 
-from .inputs import Inputs, freestream_for, preset_changes, sized_capture_height  # noqa: F401
-from .inputs import (  # noqa: F401
-    OFF_DESIGN_MIN_MACH, OFF_DESIGN_SPAN, SWEEP_POINTS, design_sweep, off_design_range,
-)
+from .inputs import Inputs, design_sweep, freestream_for, sized_capture_height
+from .inputs import off_design_range  # noqa: F401 (re-exported for the views)
 from .crashlog import guarded
 from .theme import tokens
 

@@ -26,7 +26,6 @@ from .offdesign import _deprecated_m_duct
 
 REAL_GAS_T0_LIMIT = 800.0  # K; above this, vibrational excitation makes constant gamma questionable
 SUBSONIC_WARNING = _off.SUBSONIC_WARNING
-METHODS = ("oswatitsch", "custom")
 MAX_COWL_WEDGE_DEG = 30.0   # cowl lip outer wedge input range: 0 .. this (deg)
 
 
@@ -1183,7 +1182,6 @@ def turning_for_recovery(M, n, target, gamma=1.4):
 
 
 # --- inlet characteristic and buzz onset (M9c; docs/m9c_model.md) ----------------------------
-DIFFUSER_AREA_RANGE = (1.0, 4.0)
 
 
 def _char_inputs(design_result, off):

@@ -261,10 +261,6 @@ class ExplainDrawer(QFrame):
             self._current = ("item", kind, index)
             self.refresh()
 
-    def show_topic(self, topic):
-        self._current = ("topic", topic, None)
-        self.refresh(show=True)
-
     def open_topic(self, key):
         if key is None or key[0] == "group":
             return

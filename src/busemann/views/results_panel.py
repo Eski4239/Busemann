@@ -65,13 +65,6 @@ def warning_title(text):
     return title[:1].upper() + title[1:]
 
 
-def _total_text(kgps, width, system):
-    value = _units.to_display(kgps, "mass_flow", system)
-    w = _units.to_display(width, "length", system)
-    return (f"total {fmt.sig(value, 4)} {_units.unit_label('mass_flow', system)} "
-            f"through {fmt.sig(w, 4)} {_units.unit_label('length', system)}")
-
-
 class WarningRow(QFrame):
     """A warning collapsed to a one-line title with a severity icon; click (or Enter /
     Space) expands the full text."""
@@ -488,9 +481,6 @@ class ResultsPanel(QWidget):
     def warning_texts(self):
         """Full warning texts as shown when expanded (first letter capitalised)."""
         return [row.text[:1].upper() + row.text[1:] for row in self.warning_rows]
-
-    def warning_titles(self):
-        return [row.head.text() for row in self.warning_rows]
 
     def warning_levels(self):
         return [row.level for row in self.warning_rows]

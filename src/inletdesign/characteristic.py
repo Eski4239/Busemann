@@ -158,9 +158,6 @@ class MoeckelShock:
     def vertex(self):
         return self.world(self.x0, self.y_m)
 
-    def sonic_point(self):
-        return self.world(self.x_S, self.y_S)
-
     def polyline(self, n=40, extend=1.0):
         """World points: the normal part (ramp line to the dividing streamline), then the
         hyperbola up to the sonic point (and `extend` x Y_S beyond it)."""

@@ -8,8 +8,6 @@ Mn1 = M1*sin(beta) and reusing the normal_shock relations on that component.
 Reference: NACA Report 1135, oblique shock relations (theta-beta-M chart).
 Notation: theta = flow deflection, beta = shock angle (NACA 1135 uses the reverse).
 """
-import math
-
 import numpy as np
 
 from . import normal_shock as ns

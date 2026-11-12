@@ -15,6 +15,7 @@ from ..widgets import (
     CollapsibleSection, NumberField, SegmentedControl, SpinField, field_label, section_title,
 )
 from . import format as fmt
+from .flight_panel import _form
 from .ramp_table import RampTable
 from .readout import Readout
 from ..tooltips import attach, tip
@@ -99,7 +100,6 @@ class DesignPanel(QWidget):
         # fields of M8.3 scrolled their text out of view)
         grid.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         grid.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.advanced_form = grid
         grid.addRow(self.max_cowl_check, self.max_cowl)
         grid.addRow(field_label("Cowl lip wedge", "label.cowl_lip_wedge"), self.wedge)
         self.diffuser = SpinField(i.diffuser_recovery, decimals=3, minimum=0.0, maximum=1.0,
@@ -305,11 +305,3 @@ class DesignPanel(QWidget):
         else:
             self.custom_error.setText(fmt.nbsp(error or ""))
             self.custom_error.setVisible(bool(error))
-
-
-def _form(widget):
-    form = QFormLayout(widget)
-    form.setContentsMargins(0, 0, 0, 0)
-    form.setHorizontalSpacing(tokens.space(1))
-    form.setVerticalSpacing(tokens.space(1))
-    return form

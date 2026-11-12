@@ -6,7 +6,6 @@ pytest.importorskip("PySide6")
 pytest.importorskip("pytestqt")
 pytest.importorskip("pyqtgraph")
 
-from busemann.charts import model  # noqa: E402
 from inletdesign import api  # noqa: E402
 
 pytestmark = pytest.mark.gui

@@ -7,8 +7,6 @@ from inletdesign import api
 
 from .content import OneBased
 
-TOPICS = ("method", "offdesign", "separation")
-
 
 def separation_lines(checks):
     """One plain line per shock check (the separation entry's "This case")."""

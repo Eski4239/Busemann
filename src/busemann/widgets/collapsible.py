@@ -27,9 +27,6 @@ class CollapsibleSection(QWidget):
         self.toggle.setChecked(not collapsed)
         self._set_expanded(not collapsed)
 
-    def is_expanded(self):
-        return self.toggle.isChecked()
-
     def _set_expanded(self, expanded):
         self.content.setVisible(expanded)
         self.toggle.setIcon(theme.icon("chevron-down" if expanded else "chevron-right",

@@ -417,7 +417,6 @@ class MainWindow(QMainWindow):
 
     def _build_edit_menu(self):
         menu = self.menuBar().addMenu("&Edit")
-        self.edit_menu = menu
         self.undo_action = self.undo.stack.createUndoAction(self, "Undo")
         self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
         self.redo_action = self.undo.stack.createRedoAction(self, "Redo")
@@ -430,7 +429,6 @@ class MainWindow(QMainWindow):
 
     def _build_tools_menu(self):
         menu = self.menuBar().addMenu("&Tools")
-        self.tools_menu = menu
         self.isentropic_action = menu.addAction("&Isentropic ramp…")
         self.isentropic_action.triggered.connect(self.show_isentropic_ramp)
 

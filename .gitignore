@@ -12,50 +12,39 @@ venv/
 .coverage
 htmlcov/
 
-# Fluent / CFD files
+# Ansys Fluent (large binaries) - export results to CSV in cfd/ instead
 *.cas
 *.cas.h5
 *.dat
 *.dat.h5
 *.h5
 *.trn
-
-# OS/editor
-.DS_Store
-.vscode/
-.idea/
-# Reference documents (link in README instead)
-references/*.pdf
-
-# Ansys Fluent (large binaries) - export results to CSV in cfd/ instead
-*.cas
-*.dat
-*.cas.h5
-*.dat.h5
 *.msh
-*.trn
 *.bak
-cfd/**/*_files/
-
-# SolidWorks temp/lock files
-~$*
-
-# OS / editor
-Thumbs.db
-desktop.ini
-.DS_Store
-.vscode/
-
-# Generated example outputs
-examples/output/
-results/
+# Fluent side files
+*.ip
+**/.flwb_report_files/
+cfd/*-rfile.out
 
 # Ansys Workbench projects (large binaries, keep local; results go to docs/)
 *.wbpj
 *.wbpz
 cfd/**/.*.backup/
 cfd/**/*_files/
-# Fluent side files
-*.ip
-**/.flwb_report_files/
-cfd/*-rfile.out
+
+# Reference documents (link in README instead)
+references/*.pdf
+
+# SolidWorks temp/lock files
+~$*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Generated example outputs
+examples/output/
+results/

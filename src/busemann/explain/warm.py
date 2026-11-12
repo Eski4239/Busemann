@@ -1,7 +1,7 @@
 """Every equation the Explain drawer can show for the current results (no Qt), so the cache
 can be filled in the background before the drawer is first opened."""
 from . import content as C
-from .mathsvg import render_to_files, tex_to_svg
+from .mathsvg import render_to_files
 from .select import build_context, topic_context
 
 
@@ -95,14 +95,3 @@ def shutdown():
     if _executor is not None:
         _executor.shutdown(wait=False, cancel_futures=True)
         _executor = None
-
-
-def warm_in_process(texs, color, should_stop=lambda: False):
-    """Render into the cache from this process (tools and tests only, never the GUI)."""
-    n = 0
-    for tex in texs:
-        if should_stop():
-            break
-        tex_to_svg(tex, color)
-        n += 1
-    return n

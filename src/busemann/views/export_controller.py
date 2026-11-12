@@ -7,11 +7,10 @@ folder and propose names like busemann_M3.00_2ramp_geometry.dxf.
 from pathlib import Path
 
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog
 
 from inletdesign import api
 from inletdesign.cfd_domain import export_cfd_domain_dxf, export_offdesign_domain_dxf
-from inletdesign.export import export_dxf
 
 from ..export import results as R
 from ..export.metadata import default_name, metadata
@@ -62,9 +61,6 @@ class ExportController(QObject):
     def _done(self, path):
         self.window.statusBar().showMessage(f"Exported {path.name}", 5000)
         return path
-
-    def _fail(self, exc):
-        QMessageBox.critical(self.window, "Export failed", str(exc))
 
     def _meta(self, what):
         return metadata(self.state.inputs, what)

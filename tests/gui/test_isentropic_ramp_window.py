@@ -70,7 +70,7 @@ def test_hover_shows_x_y_mach_and_pressure_ratio(qtbot, window):
     fit = win.canvas._fit()
     mid = ramp.wall_points[len(ramp.wall_points) // 2]
     pos = win.canvas._to_widget(*mid, fit)
-    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtCore import QEvent
     from PySide6.QtGui import QMouseEvent
     from PySide6.QtCore import Qt as _Qt
 

@@ -10,8 +10,6 @@ import math
 from datetime import datetime, timezone
 from pathlib import Path
 
-WALLS = ("ramp", "cowl")
-
 
 def walls(geom):
     """{"ramp": [(x, y), ...], "cowl": [lip, end]} in metres."""

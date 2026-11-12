@@ -8,14 +8,6 @@ from dataclasses import dataclass
 from inletdesign import api
 from inletdesign import separation as _sep
 
-ABOUT = (
-    "Busemann is a design lab for two-dimensional external-compression supersonic inlets. "
-    "It designs the ramp system for a flight condition (the Oswatitsch equal-strength "
-    "optimum or your own angles), draws the shock system, and reports pressure recovery, "
-    "mass capture and the flow state in every region, at the design point and off design. "
-    "Every relation is analytical (NACA Report 1135) and the model has been checked against "
-    "inviscid Fluent CFD."
-)
 ASSUMPTIONS = (
     "Two-dimensional, steady, inviscid flow; no boundary layers or bleed.",
     "Calorically perfect gas (constant γ); a warning is shown when T0 makes this optimistic.",

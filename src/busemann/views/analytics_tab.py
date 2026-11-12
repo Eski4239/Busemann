@@ -9,7 +9,7 @@ characteristic (M9c) has its own worker, cached by (design, M∞, diffuser area 
 """
 from dataclasses import dataclass
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )

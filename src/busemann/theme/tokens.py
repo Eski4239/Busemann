@@ -56,7 +56,6 @@ REGION_BORDER_DARKER = 112   # QColor.darker() factor for the 1 px region outlin
 LEGEND_INSET_PX = 16
 LEGEND_ALPHA = 0.9
 CANVAS_FILL = 0.85           # fit: drawing fills 85% of the limiting viewport dimension
-REGION_ALPHA = 0.9
 CANVAS_ANIM_MS = 150
 HOVER_PICK_PX = 6        # shock pick distance, screen px
 SHADOW_ALPHA = 28        # hover card shadow (0-255), subtle
