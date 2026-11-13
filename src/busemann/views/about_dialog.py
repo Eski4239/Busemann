@@ -20,6 +20,7 @@ from ..theme import qt as theme
 from ..theme import tokens
 
 LOGO, LOGO_FALLBACK, LOGO_H = "logo_lockup", "logo_lockup_2x.png", 40
+OWN_LICENCE = "Busemann itself: MIT License, Copyright (c) 2026 Pablo Goulet Valenti."
 
 def components():
     return json.loads(resource_path("licenses", "components.json").read_text(encoding="utf-8"))[
@@ -154,9 +155,10 @@ class AboutDialog(QDialog):
         self.licence_list.currentRowChanged.connect(self._show_licence)
         self.licence_list.setCurrentRow(0)
         self.licence_list.setMaximumWidth(tokens.space(36))
-        own = QLabel("Busemann's own source code: no licence has been chosen yet.")
+        own = QLabel(OWN_LICENCE)
         own.setObjectName("muted")
-        own.setToolTip("The repository does not contain a LICENSE file for Busemann itself.")
+        own.setToolTip("Busemann itself is open source under the MIT License (LICENSE file in "
+                       "the install folder and the repository).")
         self.licence_text.setMinimumHeight(tokens.space(30))
         page = QWidget()
         h = QHBoxLayout()
