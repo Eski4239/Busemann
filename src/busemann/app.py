@@ -582,12 +582,16 @@ def main(argv=None):
     import multiprocessing
 
     multiprocessing.freeze_support()          # equation render process in a frozen build
+    args = sys.argv[1:] if argv is None else list(argv)
+    if "--self-test" in args:                 # no window; exit code names a failing item
+        from .selftest import main as self_test
+
+        return self_test(args)
     from .explain.mathsvg import prune_cache
 
     prune_cache()                             # equation cache: drop old files, cap the size
     set_windows_app_id()
     setup_high_dpi()
-    args = sys.argv[1:] if argv is None else list(argv)
     app = QApplication.instance() or QApplication(["busemann", *args])
     from .crashlog import install as install_crash_log
 

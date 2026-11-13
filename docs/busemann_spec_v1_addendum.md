@@ -225,6 +225,13 @@ existing left panel drives it.
 One-folder PyInstaller build wrapped in an Inno Setup installer (LGPL-compliant,
 PySide6-Essentials only), MIT LICENSE, README with screenshots/GIF, GitHub release.
 
+`busemann --self-test [--self-test-log FILE]` (M12, `busemann/selftest.py`): no window; loads
+every resource group, computes the validation design (0.7437), an off-design point and the
+isentropic case, renders one Explain equation in the spawn-started warm-up process (checked to
+be a separate process, into an empty cache folder) and round-trips a DXF. One summary line;
+exit 0, or the position of the first failing item, which the summary names. The release build
+runs it on the frozen exe and fails on a non-zero code.
+
 ## I. Design files: DXF (M8.2)
 
 The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
