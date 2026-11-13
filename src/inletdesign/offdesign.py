@@ -5,7 +5,6 @@ one Mach number. This module evaluates that same fixed geometry (same ramp
 angles, ramp corner points, lip position) at a different M_inf, where the
 ramp shocks generally no longer land exactly on the cowl lip.
 """
-import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -17,13 +16,6 @@ from . import oblique_shock as obl
 COWL_ALIGNED_TOL_DEG = 1e-9   # cowl angle - lip flow angle at or below this: no cowl shock
 NO_RAMPS_MESSAGE = ("off-design evaluation needs at least one ramp "
                     "(a 0-ramp normal-shock inlet has no ramp shocks to move)")
-def _deprecated_m_duct(value, replacement):
-    warnings.warn(
-        f"M_duct is deprecated (ambiguous); use {replacement} "
-        "(M_pre_terminal = behind the last ramp shock, M_post_terminal = behind the "
-        "terminal normal shock). The alias will be removed after M6.",
-        DeprecationWarning, stacklevel=3)
-    return value
 
 
 SUBSONIC_WARNING = "flow subsonic behind last ramp shock; no terminal normal shock"
@@ -55,11 +47,6 @@ class OffDesignResult:
     # subsonic (no terminal shock)
     M_post_terminal: float = None
     theta_max_lip_deg: float = None       # theta_max at the lip Mach (None if subsonic)
-
-    @property
-    def M_duct(self):
-        """Deprecated alias of M_pre_terminal (its old meaning here)."""
-        return _deprecated_m_duct(self.M_pre_terminal, "M_pre_terminal")
 
 
 def _side_of_line(point, origin, angle_deg):

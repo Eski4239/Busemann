@@ -210,8 +210,7 @@ on white.
 - `api.py`:
   - `design(...) -> DesignResult` (inputs, angles, per-region states, recoveries,
     M_pre_terminal / M_post_terminal, throat, geometry polylines, warnings). (M5: the
-    ambiguous `M_duct` was renamed; it remains as a deprecated alias for one milestone,
-    meaning post-terminal on DesignResult and pre-terminal on OffDesignResult.)
+    ambiguous `M_duct` was renamed; its deprecated alias was removed in M12.)
   - `off_design_point(design, M) -> OffDesignResult`;
   - `off_design_sweep(design, M_min, M_max, n) -> Sweep` (points plus detachment Mach);
   - `freestream(M, altitude | (p, T), gamma) -> Freestream` (dimensional quantities).

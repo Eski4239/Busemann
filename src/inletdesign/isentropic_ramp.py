@@ -58,12 +58,13 @@ N_WALL_POINTS = 200
 
 
 def _validate_inputs(M_inf, gamma, capture_height):
+    # messages are shown in the isentropic window as they are: symbols, not code names
     if not math.isfinite(M_inf) or M_inf <= 1.0:
-        raise ValueError(f"M_inf must be > 1 (got {M_inf:g})")
+        raise ValueError(f"M∞ must be above 1 (got {M_inf:g})")
     if not math.isfinite(gamma) or gamma <= 1.0:
-        raise ValueError(f"gamma must be > 1 (got {gamma:g})")
+        raise ValueError(f"γ must be above 1 (got {gamma:g})")
     if not math.isfinite(capture_height) or capture_height <= 0.0:
-        raise ValueError(f"capture_height must be > 0 (got {capture_height:g})")
+        raise ValueError(f"capture height must be above 0 (got {capture_height:g})")
 
 
 @dataclass(frozen=True)
@@ -87,7 +88,7 @@ class IsentropicRamp:
     wall_points: tuple                # ((x, y), ...), leading edge first, lip-row last
     characteristics: tuple           # Characteristic, one per wall point after the first
     recovery: float                  # p0y / p0x(M_f): the terminal normal shock only
-    engine_face_recovery: float      # MIL-E-5008B at M_inf, for comparison
+    mil_recovery: float              # MIL-E-5008B at M_inf (a reference, not a result)
     multi_ramp_recovery: dict = field(default_factory=dict)   # n -> recovery at the same delta
     cowl_margin: float = None
     theta_max_deg: float = None
@@ -105,6 +106,18 @@ class IsentropicRamp:
         lx, ly = self.lip
         wx, wy = self.wall_points[-1]
         return float(math.hypot(lx - wx, ly - wy))
+
+    @property
+    def throat_height(self):
+        """Duct entry height h_t: the last characteristic (length r_f from the lip, at the Mach
+        angle mu_f to the flow) measured normal to the flow, h_t = r_f sin(mu_f) = r_f / M_f.
+        Equal to h_c (A/A*)(M_f) / (A/A*)(M_inf) by continuity (NACA 1135 eq. (80), p. 618)."""
+        return self.lip_to_wall_end / self.M_f
+
+    def engine_face_recovery(self, diffuser_recovery):
+        """Engine-face estimate: the inviscid recovery times the subsonic diffuser recovery
+        (the same basis as the main window's engine-face card)."""
+        return self.recovery * diffuser_recovery
 
 
 def _r_over_rinf(M, M_inf, gamma):
@@ -149,25 +162,25 @@ def isentropic_ramp(M_inf, gamma=1.4, capture_height=1.0, delta_deg=None, M_f=No
     cowl turn (delta_deg) detaches the external cowl shock (geometry.cowl_check).
     """
     if (delta_deg is None) == (M_f is None):
-        raise ValueError("give exactly one of delta_deg or M_f")
+        raise ValueError("give exactly one of the total turning δ or the final Mach number")
     _validate_inputs(M_inf, gamma, capture_height)
 
     nu_inf = pm.nu(M_inf, gamma)
     if delta_deg is None:
         if not math.isfinite(M_f) or M_f < 1.0:
-            raise ValueError(f"M_f must be >= 1 (got {M_f:g})")
+            raise ValueError(f"final Mach number must be at least 1 (got {M_f:g})")
         nu_f = pm.nu(M_f, gamma)
         delta_deg = nu_inf - nu_f
         if delta_deg < 0.0:
-            raise ValueError(f"M_f ({M_f:g}) must be <= M_inf ({M_inf:g})")
+            raise ValueError(f"final Mach number ({M_f:g}) must not exceed M∞ ({M_inf:g})")
     else:
         if delta_deg < 0.0:
-            raise ValueError(f"delta_deg must be >= 0 (got {delta_deg:g})")
+            raise ValueError(f"total turning δ must be at least 0° (got {delta_deg:g}°)")
         nu_f = nu_inf - delta_deg
         if nu_f < 0.0:
             raise ValueError(
-                f"delta_deg ({delta_deg:g}) exceeds nu(M_inf) ({nu_inf:g}): "
-                "would require M_f < 1")
+                f"total turning δ = {delta_deg:g}° exceeds ν(M∞) = {nu_inf:.3f}°: the flow "
+                "would turn subsonic")
         M_f = 1.0 if nu_f <= 1e-12 else pm.mach_from_nu(nu_f, gamma)
 
     theta_max, cowl_margin, level, message = cowl_check(M_inf, delta_deg, gamma)
@@ -189,7 +202,7 @@ def isentropic_ramp(M_inf, gamma=1.4, capture_height=1.0, delta_deg=None, M_f=No
                                               float(p_over_pinf)))
 
     recovery = float(ns.stagnation_pressure_ratio(M_f, gamma))
-    engine_face_recovery = float(standards.mil_e_5008b(M_inf))
+    mil_recovery = float(standards.mil_e_5008b(M_inf))
 
     from . import api as _api
     multi_ramp_recovery = {}
@@ -208,6 +221,6 @@ def isentropic_ramp(M_inf, gamma=1.4, capture_height=1.0, delta_deg=None, M_f=No
         M_inf=float(M_inf), gamma=float(gamma), capture_height=float(capture_height),
         delta_deg=float(delta_deg), M_f=float(M_f), lip=lip, wall_points=tuple(wall),
         characteristics=tuple(characteristics), recovery=recovery,
-        engine_face_recovery=engine_face_recovery, multi_ramp_recovery=multi_ramp_recovery,
+        mil_recovery=mil_recovery, multi_ramp_recovery=multi_ramp_recovery,
         cowl_margin=float(cowl_margin), theta_max_deg=float(theta_max), valid=valid,
         warning=warning)

@@ -207,23 +207,20 @@ def test_off_design_at_design_mach_reproduces_design_states():
     assert r.betas_deg == pytest.approx(d.betas_deg, abs=1e-9)
 
 
-# --- M5: M_duct renamed (deprecated alias for one milestone) ------------------------
+# --- M5: M_duct renamed; the deprecated alias was removed in M12 ---------------------
 
-def test_pre_and_post_terminal_mach_and_deprecated_alias():
+def test_pre_and_post_terminal_mach():
     d = api.design(3.0, 2)
     assert d.M_pre_terminal == pytest.approx(d.regions[-2].M)        # behind ramp shock 2
     assert d.M_post_terminal == pytest.approx(d.regions[-1].M)       # behind terminal shock
     assert d.M_post_terminal < 1.0 < d.M_pre_terminal
-    with pytest.warns(DeprecationWarning, match="M_post_terminal"):
-        assert d.M_duct == d.M_post_terminal                         # old design meaning
     off = api.off_design_point(d, 2.5)
     assert off.M_pre_terminal == pytest.approx(off.regions[-2].M)
     assert off.M_post_terminal == pytest.approx(off.regions[-1].M)
-    with pytest.warns(DeprecationWarning, match="M_pre_terminal"):
-        assert off.M_duct == off.M_pre_terminal                      # old off-design meaning
     for r in (d, off):
         data = r.to_dict()
         assert {"M_pre_terminal", "M_post_terminal"} <= set(data) and "M_duct" not in data
+        assert not hasattr(r, "M_duct")                               # alias removed (M12)
 
 
 def test_shock_and_freestream_explain_fields_are_consistent():

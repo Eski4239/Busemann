@@ -480,6 +480,27 @@ QCheckBox::indicator {
     background: $surface;
 }
 QCheckBox::indicator:checked { background: $accent; border-color: $accent; }
+QRadioButton { spacing: ${s1}px; }
+QRadioButton::indicator {
+    width: 14px; height: 14px;
+    border: ${border_w}px solid $text_muted;
+    border-radius: 7px;
+    background: $surface;
+}
+QRadioButton::indicator:checked { background: $accent; border-color: $accent; }
+
+/* --- isentropic ramp window (M12: same tokens as the main window) ------------------ */
+#isentropicWindow { background: $bg; }
+#isentropicWindow #fanCanvas { background: $surface; }
+#isentropicWindow #rightScroll { border-left: ${border_w}px solid $border; }
+#isentropicTakeaway { color: $text; font-size: ${size_base}px; }
+#isentropicWarning { color: $error; font-size: ${size_label}px; }
+#isentropicWarning[level="warn"] { color: $warn; }
+#multiRamp {
+    font-family: "$font_mono", "$font_mono_fallback";
+    font-size: ${size_label}px;
+    color: $text;
+}
 
 /* --- Explain topic tree ------------------------------------------------------------ */
 #explainTree {

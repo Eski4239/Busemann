@@ -77,3 +77,104 @@ def test_last_folder_is_remembered(qtbot, window, tmp_path):
     finally:
         QFileDialog.getSaveFileName = original
     assert seen and seen[0].startswith(str(folder))
+
+
+# --- M12 PART 2.3: a file that cannot be written is reported, never raised ------------------
+def _readonly(path):
+    import os
+    import stat
+
+    path.write_text("old", encoding="utf-8")
+    os.chmod(path, stat.S_IREAD)
+
+
+def _restore(path):
+    import os
+    import stat
+
+    if path.exists():
+        os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+
+
+class _Locked:
+    """Hold a file open with no sharing (another program has it open): Windows only."""
+
+    def __init__(self, path):
+        import ctypes
+        from ctypes import wintypes
+
+        path.write_text("old", encoding="utf-8")
+        create = ctypes.windll.kernel32.CreateFileW
+        create.restype = wintypes.HANDLE
+        self.close = ctypes.windll.kernel32.CloseHandle
+        GENERIC_READ, OPEN_EXISTING = 0x80000000, 3
+        self.handle = create(str(path), GENERIC_READ, 0, None, OPEN_EXISTING, 0, None)
+        assert self.handle not in (None, wintypes.HANDLE(-1).value)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close(self.handle)
+
+
+def _fail_every_export(window, tmp_path, block):
+    """Every export action against a blocked target: one clear message each, None, no raise."""
+    exports = window.exports
+    exports._update_enabled()
+    shown = []
+    exports.show_error = shown.append
+    for key, slot in (("geometry", exports.export_geometry), ("gmsh", exports.export_gmsh),
+                      ("cfd", exports.export_cfd), ("cfd_off", exports.export_cfd_offdesign),
+                      ("json", exports.export_json), ("csv", exports.export_csv)):
+        target = tmp_path / f"blocked_{key}.out"
+        exports.ask_path = lambda title, name, flt, t=target: str(t)
+        with block(target):
+            assert slot() is None, key
+        assert shown, key
+        text = shown.pop()
+        assert text.startswith(f"Could not write {target.name}: "), text
+        assert text.endswith(". Is it open in another program?"), text
+        assert window.statusBar().currentMessage() == text
+    return shown
+
+
+def test_export_to_read_only_files_reports_each_failure(qtbot, window, tmp_path):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def readonly(path):
+        _readonly(path)
+        try:
+            yield
+        finally:
+            _restore(path)
+    _fail_every_export(window, tmp_path, readonly)
+
+
+@pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows file locking")
+def test_export_to_a_locked_file_reports_each_failure(qtbot, window, tmp_path):
+    _fail_every_export(window, tmp_path, _Locked)
+
+
+def test_export_error_text_names_the_file_and_reason():
+    from busemann.views.export_controller import error_text
+
+    assert error_text("C:/x/a.dxf", PermissionError(13, "Permission denied")) == \
+        "Could not write a.dxf: Permission denied. Is it open in another program?"
+    assert error_text("b.csv", ValueError("bad value.")) == \
+        "Could not write b.csv: bad value. Is it open in another program?"
+    assert error_text("c.dxf", ezdxf.DXFError()) == \
+        "Could not write c.dxf: DXFError. Is it open in another program?"
+
+
+def test_save_to_a_read_only_file_reports(qtbot, window, tmp_path):
+    target = tmp_path / "design.dxf"
+    _readonly(target)
+    shown = []
+    window.project.show_save_error = shown.append
+    try:
+        assert window.project._write(target) is False
+    finally:
+        _restore(target)
+    assert shown and shown[0].startswith("Could not write design.dxf: ")

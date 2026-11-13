@@ -1,34 +1,48 @@
-"""Isentropic ramp window (M11, addendum G): a non-modal Tools window showing a centred
-Prandtl-Meyer compression fan (inletdesign.isentropic_ramp), alongside the current multi-ramp
-design for comparison.
+"""Isentropic ramp window (M11, addendum G; restyled in M12): a non-modal Tools window showing a
+centred Prandtl-Meyer compression fan (inletdesign.isentropic_ramp), alongside the current
+multi-ramp design for comparison.
 
-Left: delta/M_f toggle, h_c and M_inf fields (a "follow main design" checkbox keeps M_inf,
-gamma and h_c synced to the main window's design). Centre: a zoomed canvas with the wall,
-characteristics, lip and a continuous p/p_inf field. Right: results (M_f, recovery, engine-face
-estimate vs MIL-E-5008B, multi-ramp recoveries at the same delta, cowl margin, wall length) and
-one computed takeaway. Every computation (including the multi-ramp comparison) runs on this
-window's own worker thread; the GUI thread only draws.
+Left panel: "Follow main design", δ / final-Mach choice and the input fields. Centre: the fan
+drawn like the main canvas (hatched wall, cowl wedge, shock colour for the terminal normal
+shock at the duct entry) with a continuous p/p∞ field and its legend, framed to fill the view.
+Right panel: result cards as in the Results panel (recovery; engine face ≈ η × diffuser
+recovery; MIL-E-5008B; final Mach; duct entry height; cowl margin; wall length), the
+multi-ramp recoveries at the same δ, one computed takeaway and the exports. Every
+computation runs on this window's own worker thread; the GUI thread only draws.
 """
 import math
 
-from PySide6.QtCore import QObject, QPointF, QRectF, QRunnable, Qt, QThreadPool, QTimer, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
+from PySide6.QtCore import (
+    QObject, QPointF, QRectF, QRunnable, QSizeF, Qt, QThreadPool, QTimer, Signal,
+)
+from PySide6.QtGui import QBrush, QColor, QLinearGradient, QPainter, QPolygonF, QStaticText
 from PySide6.QtWidgets import (
-    QButtonGroup, QCheckBox, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
-    QRadioButton, QVBoxLayout, QWidget,
+    QButtonGroup, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QPushButton,
+    QRadioButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from ..canvas import colors as _colors
+from ..canvas import picture as _pic
 from ..canvas.hover_card import HoverCard
+from ..canvas.scene import color, pen
 from ..crashlog import guarded
 from ..theme import qt as theme
 from ..theme import tokens
+from ..tooltips import tip
+from ..widgets import KpiCard, field_label, section_title
 from ..widgets.spin_field import SpinField
 
 DEBOUNCE_MS = 120
 CACHE_SIZE = 32
-FAN_FIELD_STOPS = ("#F7F4EC", "#E8C27A", "#C9622A", "#8A2E1E")   # p/p_inf: pale to deep rust
+FAN_FIELD_STOPS = ("#F7F4EC", "#E8C27A", "#C9622A", "#8A2E1E")   # p/p∞: pale to deep rust
 COALESCE_LABEL = "characteristics coalesce into a shock here (not modelled)"
+LEGEND_TITLE = "p/p∞"
+DEFAULT_DIFFUSER = 0.97              # Inputs.diffuser_recovery default (no main window)
+LEFT_W, RIGHT_W = 260, 300
+# canvas frame, px: room for the coalesce label above, the h_t label below, the legend right
+PAD_LEFT, PAD_TOP, PAD_BOTTOM, LEGEND_W = 28, 64, 36, 76
+DUCT_EXTRA = 0.35                    # drawn duct beyond the normal shock, in capture heights
+LABEL_W, LABEL_H = 236, 34
 
 
 class _Signals(QObject):
@@ -69,34 +83,74 @@ class _Job(QRunnable):
 N_RAMPS_LIST = (1, 2, 3, 4)
 
 
+def fan_geometry(ramp):
+    """Model geometry of the drawing (metres, y up): the wall surface continued as the duct
+    floor, the cowl wedge, the terminal normal shock at the duct entry (foot, lip)."""
+    h = ramp.capture_height
+    delta = ramp.delta_deg
+    flow = (math.cos(math.radians(delta)), math.sin(math.radians(delta)))
+    normal = (-flow[1], flow[0])
+    wall_end = ramp.wall_points[-1]
+    mu_f = math.asin(min(1.0, 1.0 / ramp.M_f))
+    ahead = ramp.lip_to_wall_end * math.cos(mu_f)    # wall end -> normal-shock foot, along flow
+    floor_len = ahead + DUCT_EXTRA * h
+    floor_end = (wall_end[0] + floor_len * flow[0], wall_end[1] + floor_len * flow[1])
+    surface = list(ramp.wall_points) + [floor_end]
+    band = _pic.wall_band(surface, h)
+    cowl, cowl_inner_end, cowl_outer_end = _pic.cowl_wedge(
+        ramp.lip, delta, h, 0.0, length=DUCT_EXTRA)
+    foot = (ramp.lip[0] - ramp.throat_height * normal[0],
+            ramp.lip[1] - ramp.throat_height * normal[1])
+    return dict(surface=surface, band=band, cowl=cowl, foot=foot, wall_end=wall_end,
+                floor_end=floor_end, cowl_outer_end=cowl_outer_end)
+
+
 class _FanCanvas(QWidget):
-    """Zoomed, self-contained paint of the fan: wall, characteristics, lip, p/p_inf field."""
+    """Self-contained paint of the fan: field, characteristics, wall, cowl, terminal shock,
+    labels and the p/p∞ legend."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setObjectName("fanCanvas")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setMouseTracking(True)
-        self.setMinimumSize(320, 320)
+        self.setMinimumSize(360, 320)
+        self.setToolTip(tip("iso.canvas"))
         self.ramp = None
+        self.geometry_ = None
         self.hover_card = HoverCard(parent if parent is not None else self)
+        self.label_rects = {}           # name -> QRectF of each painted label (tests)
+        self.painted_texts = []          # every string painted (text audit)
+        self.legend_rect = QRectF()
 
     def set_ramp(self, ramp):
         self.ramp = ramp
+        self.geometry_ = fan_geometry(ramp) if ramp is not None else None
         self.update()
 
+    def drawing_rect(self):
+        """Widget area the drawing is fitted into (label padding and the legend excluded)."""
+        return QRectF(PAD_LEFT, PAD_TOP, max(self.width() - PAD_LEFT - LEGEND_W - 8, 1.0),
+                      max(self.height() - PAD_TOP - PAD_BOTTOM, 1.0))
+
+    def _bounds(self):
+        g = self.geometry_
+        pts = [*self.ramp.wall_points, self.ramp.lip, g["floor_end"], g["cowl_outer_end"],
+               *g["band"]]
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        return min(xs), max(xs), min(ys), max(ys)
+
     def _fit(self):
-        """World -> widget affine map, +y up, margin, fit the fan + lip + leading edge."""
+        """World -> widget map (scale, ox, oy), +y up: ramp, fan, lip and duct entry fill the
+        drawing rect at one scale, centred."""
         if self.ramp is None:
             return None
-        xs = [p[0] for p in self.ramp.wall_points] + [self.ramp.lip[0]]
-        ys = [p[1] for p in self.ramp.wall_points] + [self.ramp.lip[1]]
-        x0, x1 = min(xs), max(xs)
-        y0, y1 = min(ys), max(ys)
+        x0, x1, y0, y1 = self._bounds()
+        area = self.drawing_rect()
         w, h = max(x1 - x0, 1e-9), max(y1 - y0, 1e-9)
-        margin = 0.18
-        avail_w, avail_h = self.width() * (1 - 2 * margin), self.height() * (1 - 2 * margin)
-        scale = min(avail_w / w, avail_h / h)
-        ox = self.width() / 2 - scale * (x0 + x1) / 2
-        oy = self.height() / 2 + scale * (y0 + y1) / 2
+        scale = min(area.width() / w, area.height() / h)
+        ox = area.center().x() - scale * (x0 + x1) / 2
+        oy = area.center().y() + scale * (y0 + y1) / 2
         return scale, ox, oy
 
     def _to_widget(self, x, y, fit):
@@ -107,87 +161,152 @@ class _FanCanvas(QWidget):
         scale, ox, oy = fit
         return ((px - ox) / scale, (oy - py) / scale)
 
+    def _poly(self, points, fit):
+        return QPolygonF([self._to_widget(*p, fit) for p in points])
+
     @guarded()
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.fillRect(self.rect(), QColor(tokens.COLORS["bg"]))
+        painter.fillRect(self.rect(), color("surface"))
+        self.label_rects, self.painted_texts = {}, []
         if self.ramp is None:
             painter.end()
             return
         fit = self._fit()
         self._draw_field(painter, fit)
         self._draw_characteristics(painter, fit)
-        self._draw_wall(painter, fit)
-        self._draw_lip(painter, fit)
+        self._draw_walls(painter, fit)
+        self._draw_terminal_shock(painter, fit)
+        self._draw_flow_label(painter)
         self._draw_coalesce_label(painter, fit)
+        self._draw_legend(painter)
         painter.end()
 
+    # --- field ---------------------------------------------------------------------------
+    def _p_range(self):
+        ps = [c.p_over_pinf for c in self.ramp.characteristics] or [1.0]
+        return 1.0, max(max(ps), 1.0)
+
+    def _field_color(self, p):
+        lo, hi = self._p_range()
+        return QColor(_colors.ramp(FAN_FIELD_STOPS, (p - lo) / max(hi - lo, 1e-12)))
+
     def _draw_field(self, painter, fit):
-        ramp = self.ramp
-        if not ramp.characteristics:
-            return
-        p_max = max(c.p_over_pinf for c in ramp.characteristics)
-        lip = ramp.lip
-        pts = [ramp.wall_points[0]] + [c for c in ramp.wall_points[1:]]
-        for i in range(len(ramp.characteristics) - 1):
-            c0, c1 = ramp.characteristics[i], ramp.characteristics[i + 1]
-            w0, w1 = ramp.wall_points[i + 1], ramp.wall_points[i + 2]
-            colour = QColor(_colors.ramp(FAN_FIELD_STOPS, c0.p_over_pinf / p_max))
-            painter.setBrush(colour)
-            painter.setPen(Qt.PenStyle.NoPen)
-            poly = [self._to_widget(*w0, fit), self._to_widget(*w1, fit),
-                    self._to_widget(*lip, fit)]
-            painter.drawPolygon(poly)
+        ramp, g = self.ramp, self.geometry_
+        painter.setPen(Qt.PenStyle.NoPen)
+        for i, c in enumerate(ramp.characteristics):
+            w0, w1 = ramp.wall_points[i], ramp.wall_points[i + 1]
+            painter.setBrush(self._field_color(c.p_over_pinf))
+            painter.drawPolygon(self._poly((w0, w1, ramp.lip), fit))
+        # uniform flow at the final Mach between the last characteristic and the normal shock
+        painter.setBrush(self._field_color(self._p_range()[1]))
+        painter.drawPolygon(self._poly((g["wall_end"], g["foot"], ramp.lip), fit))
 
     def _draw_characteristics(self, painter, fit):
-        pen = QPen(QColor(tokens.COLORS["border"]))
-        pen.setWidthF(0.6)
-        painter.setPen(pen)
+        painter.setPen(pen("border", 0.8))
         lip = self._to_widget(*self.ramp.lip, fit)
+        last = len(self.ramp.wall_points) - 1
         for i, pt in enumerate(self.ramp.wall_points):
-            if i == 0 or i % 8:
+            if i % 8 and i != last:
                 continue
             painter.drawLine(self._to_widget(*pt, fit), lip)
 
-    def _draw_wall(self, painter, fit):
-        pen = QPen(QColor(tokens.COLORS["text"]))
-        pen.setWidthF(2.0)
-        painter.setPen(pen)
-        pts = [self._to_widget(*p, fit) for p in self.ramp.wall_points]
-        for a, b in zip(pts, pts[1:]):
-            painter.drawLine(a, b)
-        # hatching, coarse ticks perpendicular to the wall
-        hatch_pen = QPen(QColor(tokens.COLORS["border"]))
-        hatch_pen.setWidthF(1.0)
-        painter.setPen(hatch_pen)
-        step = max(1, len(pts) // 24)
-        for i in range(0, len(pts) - 1, step):
-            ax, ay = pts[i].x(), pts[i].y()
-            bx, by = pts[i + 1].x(), pts[i + 1].y()
-            dx, dy = bx - ax, by - ay
-            length = math.hypot(dx, dy) or 1.0
-            nx, ny = -dy / length * 8, dx / length * 8
-            painter.drawLine(QPointF(ax, ay), QPointF(ax + nx, ay + ny))
-
-    def _draw_lip(self, painter, fit):
-        lip = self._to_widget(*self.ramp.lip, fit)
-        painter.setBrush(QColor(tokens.COLORS["accent"]))
+    # --- walls (as the main canvas: canvas.scene / canvas.picture) --------------------------
+    def _draw_walls(self, painter, fit):
+        g = self.geometry_
+        hatch = QBrush(color("wall"), Qt.BrushStyle.BDiagPattern)    # 45° wall hatching
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(lip, 4, 4)
+        painter.setBrush(hatch)
+        painter.drawPolygon(self._poly(g["band"], fit))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(pen("wall", 2.0))
+        painter.drawPolyline(self._poly(g["surface"], fit))
+        painter.setBrush(hatch)
+        painter.setPen(pen("wall", 1.5))
+        painter.drawPolygon(self._poly(g["cowl"], fit))
+
+    def _draw_terminal_shock(self, painter, fit):
+        g = self.geometry_
+        foot, lip = self._to_widget(*g["foot"], fit), self._to_widget(*self.ramp.lip, fit)
+        painter.setPen(pen("shock", 2.0))
+        painter.drawLine(foot, lip)
+        # label below the duct floor (clear of the hatching), with a leader to the shock foot
+        text = f"h<sub>t</sub> {self.ramp.throat_height * 1000.0:.2f} mm"
+        at = QPointF(foot.x() + 14, foot.y() + 30)
+        rect = self._rich_text(painter, "h_t", text, at, boxed=True)
+        painter.setPen(pen("shock", 1.0, Qt.PenStyle.DotLine))
+        painter.drawLine(foot, QPointF(rect.left() + 4, rect.top()))
+
+    def _draw_flow_label(self, painter):
+        text = f"M∞ {self.ramp.M_inf:.2f} →"
+        self._plain_text(painter, "flow", text, QRectF(PAD_LEFT, PAD_TOP - 30, 120, 18),
+                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "text")
 
     def _draw_coalesce_label(self, painter, fit):
         lip = self._to_widget(*self.ramp.lip, fit)
-        painter.setFont(theme.ui_font(tokens.SIZE_LABEL))
-        painter.setPen(QColor(tokens.COLORS["text_muted"]))
-        rect = QRectF(lip.x() - 110, lip.y() - 46, 220, 28)
-        painter.setBrush(QColor(tokens.COLORS["surface"]))
-        painter.setPen(QColor(tokens.COLORS["border"]))
+        x = min(max(lip.x() - LABEL_W / 2, 8.0), self.width() - LEGEND_W - 8 - LABEL_W)
+        y = min(max(lip.y() - LABEL_H - 16, 8.0), self.height() - LABEL_H - 8)
+        rect = QRectF(x, y, LABEL_W, LABEL_H)
+        painter.setPen(pen("border", 1.0, Qt.PenStyle.DotLine))
+        painter.drawLine(QPointF(min(max(lip.x(), rect.left()), rect.right()), rect.bottom()),
+                         lip)
+        painter.setBrush(color("surface"))
+        painter.setPen(pen("border", 1.0))
         painter.drawRoundedRect(rect, 4, 4)
-        painter.setPen(QColor(tokens.COLORS["text_muted"]))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-                         COALESCE_LABEL)
+        self._plain_text(painter, "coalesce", COALESCE_LABEL, rect.adjusted(6, 2, -6, -2),
+                         Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, "text_muted")
+        self.label_rects["coalesce"] = rect
 
+    def _draw_legend(self, painter):
+        lo, hi = self._p_range()
+        bar_h = min(170.0, max(self.height() - PAD_TOP - PAD_BOTTOM, 40.0))
+        bar = QRectF(self.width() - LEGEND_W + 8, PAD_TOP, 12, bar_h)
+        gradient = QLinearGradient(bar.bottomLeft(), bar.topLeft())
+        for k, stop in enumerate(FAN_FIELD_STOPS):
+            gradient.setColorAt(k / (len(FAN_FIELD_STOPS) - 1), QColor(stop))
+        painter.setPen(pen("border", 1.0))
+        painter.setBrush(QBrush(gradient))
+        painter.drawRect(bar)
+        align = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        self._plain_text(painter, "legend_title", LEGEND_TITLE,
+                         QRectF(bar.left(), bar.top() - 22, LEGEND_W - 12, 16), align, "text")
+        self._plain_text(painter, "legend_max", f"{hi:.2f}",
+                         QRectF(bar.right() + 6, bar.top() - 8, 44, 16), align, "text_muted")
+        self._plain_text(painter, "legend_min", f"{lo:.2f}",
+                         QRectF(bar.right() + 6, bar.bottom() - 8, 44, 16), align, "text_muted")
+        self.legend_rect = QRectF(bar.left(), bar.top() - 22, LEGEND_W - 12, bar_h + 30)
+
+    # --- text helpers ----------------------------------------------------------------------
+    def _plain_text(self, painter, name, text, rect, flags, colour):
+        painter.setFont(theme.ui_font(tokens.SIZE_LABEL))
+        painter.setPen(color(colour))
+        painter.drawText(rect, flags, text)
+        self.painted_texts.append(text)
+        self.label_rects.setdefault(name, rect)
+
+    def _rich_text(self, painter, name, html, at, boxed=False):
+        """Rich text (real subscripts) at `at`, kept inside the widget; returns its rect."""
+        static = QStaticText(html)
+        static.setTextFormat(Qt.TextFormat.RichText)
+        static.setTextWidth(-1)
+        painter.setFont(theme.ui_font(tokens.SIZE_LABEL))
+        static.prepare(painter.transform(), painter.font())
+        size = static.size()
+        x = min(max(at.x(), 4.0), self.width() - LEGEND_W - size.width() - 8)
+        y = min(max(at.y(), 4.0), self.height() - size.height() - 6)
+        rect = QRectF(QPointF(x, y), QSizeF(size))
+        if boxed:
+            painter.setBrush(color("surface"))
+            painter.setPen(pen("border", 1.0))
+            painter.drawRoundedRect(rect.adjusted(-4, -2, 4, 2), 4, 4)
+        painter.setPen(color("text"))
+        painter.drawStaticText(rect.topLeft(), static)
+        self.painted_texts.append(html)
+        self.label_rects[name] = rect.adjusted(-4, -2, 4, 2) if boxed else rect
+        return rect
+
+    # --- hover -----------------------------------------------------------------------------
     @guarded()
     def mouseMoveEvent(self, event):
         fit = self._fit()
@@ -220,13 +339,32 @@ class _FanCanvas(QWidget):
         super().leaveEvent(event)
 
 
+def _rich_field_label(html, key):
+    """Field label with real subscripts (field_label() uppercases plain ASCII text)."""
+    label = QLabel(html)
+    label.setObjectName("fieldLabel")
+    label.setFont(theme.label_font())
+    label.setTextFormat(Qt.TextFormat.RichText)
+    label.setToolTip(tip(key))
+    return label
+
+
+def _card(title_html, key, compact=True):
+    card = KpiCard("", key, compact=compact)
+    card.title.setTextFormat(Qt.TextFormat.RichText)
+    card.title.setText(title_html)
+    return card
+
+
 class IsentropicRampWindow(QWidget):
     def __init__(self, main_window, parent=None):
         super().__init__(parent)
+        self.setObjectName("isentropicWindow")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Isentropic ramp")
         self.setWindowIcon(theme.app_icon())
-        self.setMinimumSize(900, 600)
+        self.setMinimumSize(1000, 640)
         self.main_window = main_window
         self._ramp = None
         self._gamma = 1.4
@@ -241,12 +379,32 @@ class IsentropicRampWindow(QWidget):
         self._timer.setInterval(DEBOUNCE_MS)
         self._timer.timeout.connect(self._recompute)
 
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        row.addWidget(self._build_inputs())
+        self.canvas = _FanCanvas(self)
+        row.addWidget(self.canvas, 1)
+        row.addWidget(self._build_results())
+
+        if main_window is not None:
+            main_window.state.design_ready.connect(self._on_main_design_ready)
+            # bound method, not a lambda: Qt drops it when this window is deleted
+            main_window.state.inputs_changed.connect(self._on_main_inputs)
+        self._sync_from_main()
+        self._schedule()
+
+    # --- panels ------------------------------------------------------------------------------
+    def _build_inputs(self):
         self.follow_main = QCheckBox("Follow main design")
+        self.follow_main.setToolTip(tip("iso.follow"))
         self.follow_main.setChecked(True)
         self.follow_main.toggled.connect(self._on_follow_toggled)
 
-        self.delta_radio = QRadioButton("δ (total turning)")
-        self.mf_radio = QRadioButton("M_f (final Mach)")
+        self.delta_radio = QRadioButton("Total turning δ")
+        self.mf_radio = QRadioButton("Final Mach number")
+        for radio in (self.delta_radio, self.mf_radio):
+            radio.setToolTip(tip("iso.specify"))
         self.delta_radio.setChecked(True)
         self._toggle_group = QButtonGroup(self)
         self._toggle_group.addButton(self.delta_radio)
@@ -260,7 +418,6 @@ class IsentropicRampWindow(QWidget):
         self.mf_field.setEnabled(False)
         self.delta_field.value_changed.connect(lambda _v: self._schedule())
         self.mf_field.value_changed.connect(lambda _v: self._schedule())
-
         self.m_inf_field = SpinField(value=3.0, decimals=3, minimum=1.001, maximum=20.0,
                                      step=0.1, unit="", quantity="dimensionless")
         self.h_c_field = SpinField(value=0.1, decimals=4, minimum=1e-6, maximum=10.0,
@@ -269,66 +426,87 @@ class IsentropicRampWindow(QWidget):
         self.h_c_field.value_changed.connect(lambda _v: self._schedule())
         self.m_inf_field.setEnabled(False)
         self.h_c_field.setEnabled(False)
+        for field, key in ((self.delta_field, "iso.delta"), (self.mf_field, "iso.mf"),
+                           (self.m_inf_field, "iso.m_inf"), (self.h_c_field, "iso.h_c")):
+            field.setToolTip(tip(key))
 
-        left = QVBoxLayout()
-        left.addWidget(self.follow_main)
-        left.addWidget(self.delta_radio)
-        left.addWidget(self.delta_field)
-        left.addWidget(self.mf_radio)
-        left.addWidget(self.mf_field)
-        left.addWidget(QLabel("M∞"))
-        left.addWidget(self.m_inf_field)
-        left.addWidget(QLabel("h_c (capture height)"))
-        left.addWidget(self.h_c_field)
-        left.addStretch(1)
-        left_panel = QWidget()
-        left_panel.setLayout(left)
-        left_panel.setFixedWidth(240)
+        panel = QFrame()
+        panel.setObjectName("leftPanel")
+        panel.setFixedWidth(LEFT_W)
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(tokens.space(2), tokens.space(2), tokens.space(2), tokens.space(2))
+        v.setSpacing(tokens.space(1))
+        v.addWidget(section_title("Inputs", "iso.section_inputs"))
+        v.addWidget(self.follow_main)
+        v.addSpacing(4)
+        v.addWidget(field_label("Specify by", "iso.specify"))
+        v.addWidget(self.delta_radio)
+        v.addWidget(self.mf_radio)
+        v.addSpacing(4)
+        self.input_labels = [
+            _rich_field_label("TOTAL TURNING δ", "iso.delta"),
+            _rich_field_label("FINAL MACH M<sub>f</sub>", "iso.mf"),
+            _rich_field_label("FREESTREAM M∞", "iso.m_inf"),
+            _rich_field_label("CAPTURE HEIGHT h<sub>c</sub>", "iso.h_c"),
+        ]
+        for label, field in zip(self.input_labels, (self.delta_field, self.mf_field,
+                                                    self.m_inf_field, self.h_c_field)):
+            v.addWidget(label)
+            v.addWidget(field)
+        v.addStretch(1)
+        return panel
 
-        self.canvas = _FanCanvas(self)
-
-        self.result_labels = {}
-        right = QVBoxLayout()
-        for key, title in (("mf", "M_f"), ("recovery", "Recovery"),
-                           ("engine_face", "Engine-face (MIL-E-5008B)"),
-                           ("cowl_margin", "Cowl margin"), ("wall_length", "Wall length")):
-            lab = QLabel("—")
-            lab.setObjectName("isentropicResult")
-            right.addWidget(QLabel(title))
-            right.addWidget(lab)
-            self.result_labels[key] = lab
+    def _build_results(self):
+        self.cards = {
+            "recovery": KpiCard("Total pressure recovery", "iso.recovery"),
+            "engine_face": _card("ENGINE FACE ≈ η × DIFFUSER RECOVERY", "iso.engine_face"),
+            "mil": _card("MIL-E-5008B", "iso.mil"),
+            "final_mach": _card("FINAL MACH M<sub>f</sub>", "iso.final_mach"),
+            "h_t": _card("DUCT ENTRY HEIGHT h<sub>t</sub>", "iso.h_t"),
+            "cowl_margin": _card("COWL MARGIN", "iso.cowl_margin"),
+            "wall_length": _card("WALL LENGTH", "iso.wall_length"),
+        }
         self.multi_ramp_label = QLabel("—")
-        self.multi_ramp_label.setWordWrap(True)
-        right.addWidget(QLabel("Multi-ramp recovery at the same δ"))
-        right.addWidget(self.multi_ramp_label)
+        self.multi_ramp_label.setObjectName("multiRamp")
+        self.multi_ramp_label.setTextFormat(Qt.TextFormat.RichText)
+        self.multi_ramp_label.setToolTip(tip("iso.multi"))
         self.takeaway_label = QLabel("")
         self.takeaway_label.setWordWrap(True)
         self.takeaway_label.setObjectName("isentropicTakeaway")
-        right.addWidget(self.takeaway_label)
         self.warning_label = QLabel("")
         self.warning_label.setWordWrap(True)
         self.warning_label.setObjectName("isentropicWarning")
-        right.addWidget(self.warning_label)
         self.export_dxf_button = QPushButton("Export DXF…")
         self.export_dxf_button.clicked.connect(self.export_dxf)
         self.export_geo_button = QPushButton("Export Gmsh (.geo)…")
         self.export_geo_button.clicked.connect(self.export_geo)
-        right.addWidget(self.export_dxf_button)
-        right.addWidget(self.export_geo_button)
-        right.addStretch(1)
-        right_panel = QWidget()
-        right_panel.setLayout(right)
-        right_panel.setFixedWidth(260)
+        for button in (self.export_dxf_button, self.export_geo_button):
+            button.setObjectName("secondaryButton")
+            button.setToolTip(tip("iso.export"))
 
-        row = QHBoxLayout(self)
-        row.addWidget(left_panel)
-        row.addWidget(self.canvas, 1)
-        row.addWidget(right_panel)
-
-        if main_window is not None:
-            main_window.state.design_ready.connect(self._on_main_design_ready)
-        self._sync_from_main()
-        self._schedule()
+        body = QWidget()
+        body.setObjectName("panelBody")
+        v = QVBoxLayout(body)
+        v.setContentsMargins(tokens.space(2), tokens.space(2), tokens.space(2), tokens.space(2))
+        v.setSpacing(tokens.space(1))
+        v.addWidget(section_title("Results", "iso.section_results"))
+        for card in self.cards.values():
+            v.addWidget(card)
+        v.addSpacing(tokens.space(1))
+        v.addWidget(section_title("Multi-ramp at the same δ", "iso.multi"))
+        v.addWidget(self.multi_ramp_label)
+        v.addWidget(self.takeaway_label)
+        v.addWidget(self.warning_label)
+        v.addStretch(1)
+        v.addWidget(self.export_dxf_button)
+        v.addWidget(self.export_geo_button)
+        scroll = QScrollArea()
+        scroll.setObjectName("rightScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(body)
+        scroll.setFixedWidth(RIGHT_W)
+        return scroll
 
     # --- inputs -----------------------------------------------------------------------------
     def _on_follow_toggled(self, checked):
@@ -337,6 +515,9 @@ class IsentropicRampWindow(QWidget):
         if checked:
             self._sync_from_main()
         self._schedule()
+
+    def _on_main_inputs(self, *_):
+        self._show_cards()               # the diffuser recovery may have changed
 
     def _on_main_design_ready(self, design, _error):
         if self.follow_main.isChecked() and design is not None:
@@ -352,6 +533,12 @@ class IsentropicRampWindow(QWidget):
         self._gamma = design.inputs.gamma
         if self.follow_main.isChecked():
             self.delta_field.set_value(design.cowl_angle_deg)
+
+    def diffuser_recovery(self):
+        """The main window's subsonic diffuser recovery (Design ▸ Advanced)."""
+        if self.main_window is None:
+            return DEFAULT_DIFFUSER
+        return self.main_window.state.inputs.diffuser_recovery
 
     def load_from_header(self, header):
         """Load this window's inputs from an isentropic-ramp DXF's BUSEMANN_* header
@@ -409,34 +596,55 @@ class IsentropicRampWindow(QWidget):
             return
         self._apply(result)
 
+    def _set_warning(self, text, level="error"):
+        self.warning_label.setText(text[:1].upper() + text[1:] if text else "")
+        self.warning_label.setProperty("level", level)
+        self.warning_label.style().unpolish(self.warning_label)
+        self.warning_label.style().polish(self.warning_label)
+
     def _apply(self, result):
         if result.error:
             self._ramp = None
             self.canvas.set_ramp(None)
-            self.warning_label.setText(result.error)
-            for lab in self.result_labels.values():
-                lab.setText("—")
+            self._set_warning(result.error, "error")
+            for card in self.cards.values():
+                card.clear()
             self.multi_ramp_label.setText("—")
             self.takeaway_label.setText("")
             return
         ramp = result.ramp
         self._ramp = ramp
         self.canvas.set_ramp(ramp)
-        self.result_labels["mf"].setText(f"{ramp.M_f:.4f}")
-        self.result_labels["recovery"].setText(f"{ramp.recovery:.4f}")
-        self.result_labels["engine_face"].setText(f"{ramp.engine_face_recovery:.4f}")
-        self.result_labels["cowl_margin"].setText(f"{ramp.cowl_margin:.2f}°")
-        self.result_labels["wall_length"].setText(f"{ramp.wall_length * 1000:.2f} mm")
-        parts = [f"n={n}: {r:.4f}" for n, r in sorted(ramp.multi_ramp_recovery.items())]
-        self.multi_ramp_label.setText(", ".join(parts) if parts else "—")
+        self._show_cards()
+        rows = [f"{n} ramp{'s' if n != 1 else ''}&nbsp;&nbsp;{r:.4f}"
+                for n, r in sorted(ramp.multi_ramp_recovery.items())]
+        self.multi_ramp_label.setText("<br>".join(rows) if rows else "—")
         compare_n = (max(ramp.multi_ramp_recovery, key=lambda n: ramp.multi_ramp_recovery[n])
-                    if ramp.multi_ramp_recovery else None)
+                     if ramp.multi_ramp_recovery else None)
         if compare_n is not None:
             compare_r = ramp.multi_ramp_recovery[compare_n]
             self.takeaway_label.setText(
                 f"At δ = {ramp.delta_deg:.1f}° the isentropic ramp recovers {ramp.recovery:.3f} "
                 f"vs {compare_r:.3f} for {compare_n} ramps.")
-        self.warning_label.setText(ramp.warning or "")
+        self._set_warning(ramp.warning or "", "warn")
+
+    def _show_cards(self):
+        ramp = self._ramp
+        if ramp is None:
+            return
+        diffuser = self.diffuser_recovery()
+        face, mil = ramp.engine_face_recovery(diffuser), ramp.mil_recovery
+        c = self.cards
+        c["recovery"].set_value(f"{ramp.recovery:.4f}")
+        c["engine_face"].set_value(f"{face:.3f}", sub=f"Diffuser recovery {diffuser:.2f} "
+                                                      "(main design, estimate)")
+        pct = 100.0 * (face / mil - 1.0)
+        c["mil"].set_value(f"{mil:.3f}", sub=(f"Engine face {abs(pct):.1f} % "
+                                              f"{'above' if pct >= 0 else 'below'} it"))
+        c["final_mach"].set_value(f"{ramp.M_f:.4f}")
+        c["h_t"].set_value(f"{ramp.throat_height * 1000.0:.2f}", "mm")
+        c["cowl_margin"].set_value(f"{ramp.cowl_margin:+.2f}", "°")
+        c["wall_length"].set_value(f"{ramp.wall_length * 1000.0:.2f}", "mm")
 
     # --- export -------------------------------------------------------------------------------
     def _export_meta(self, what):
@@ -454,41 +662,48 @@ class IsentropicRampWindow(QWidget):
                        "capture_height": ramp.capture_height, "delta_deg": ramp.delta_deg},
         }
 
-    def export_dxf(self):
+    def ask_path(self, title, file_filter):
+        """Save dialog (replaced in tests)."""
+        path, _ = QFileDialog.getSaveFileName(self, title, "", file_filter)
+        return path or None
+
+    def show_error(self, text):
+        """Export error message (replaced in tests)."""
+        from .export_controller import show_export_error
+
+        show_export_error(self, text)
+
+    def _export(self, title, file_filter, what, writer):
         if self._ramp is None:
-            return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export isentropic ramp DXF", "", "DXF drawing (*.dxf)")
+            return None
+        path = self.ask_path(title, file_filter)
         if not path:
-            return
-        try:
-            from inletdesign.export import export_isentropic_dxf
+            return None
+        from ..export.notes import write_verification_notes
+        from .export_controller import write_guarded
 
-            from ..export.notes import write_verification_notes
+        meta = self._export_meta(what)
 
-            meta = self._export_meta("isentropic ramp DXF")
-            export_isentropic_dxf(self._ramp, path, metadata=dict(meta))
+        def write():
+            writer(self._ramp, path, dict(meta))
             write_verification_notes(path, meta, ())
-        except OSError as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
+        return write_guarded(path, write, self.show_error)
+
+    def export_dxf(self):
+        from inletdesign.export import export_isentropic_dxf
+
+        return self._export("Export isentropic ramp DXF", "DXF drawing (*.dxf)",
+                            "isentropic ramp DXF",
+                            lambda ramp, path, meta: export_isentropic_dxf(ramp, path,
+                                                                           metadata=meta))
 
     def export_geo(self):
-        if self._ramp is None:
-            return
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Export isentropic ramp Gmsh geometry", "", "Gmsh geometry (*.geo)")
-        if not path:
-            return
-        try:
-            from inletdesign.export_cad import export_isentropic_geo
+        from inletdesign.export_cad import export_isentropic_geo
 
-            from ..export.notes import write_verification_notes
-
-            meta = self._export_meta("isentropic ramp Gmsh .geo")
-            export_isentropic_geo(self._ramp, path, metadata=meta)
-            write_verification_notes(path, meta, ())
-        except OSError as exc:
-            QMessageBox.critical(self, "Export failed", str(exc))
+        return self._export("Export isentropic ramp Gmsh geometry", "Gmsh geometry (*.geo)",
+                            "isentropic ramp Gmsh .geo",
+                            lambda ramp, path, meta: export_isentropic_geo(ramp, path,
+                                                                           metadata=meta))
 
     # --- lifecycle ------------------------------------------------------------------------
     def shutdown(self):

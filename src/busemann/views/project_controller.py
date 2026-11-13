@@ -247,11 +247,12 @@ class ProjectController(QObject):
         return self._write(path)
 
     def _write(self, path):
-        try:
-            P.save(path, self.state.inputs, self.view(), design=self.state.design,
-                   metadata=self._metadata())
-        except OSError as exc:
-            self.show_error(f"Cannot save {path.name}: {exc.strerror or exc}")
+        from .export_controller import write_guarded
+
+        if write_guarded(path, lambda: P.save(path, self.state.inputs, self.view(),
+                                              design=self.state.design,
+                                              metadata=self._metadata()),
+                         self.show_save_error) is None:
             return False
         self.path = Path(path)
         self.origin = None
@@ -271,6 +272,10 @@ class ProjectController(QObject):
     # --- dialogs (replaced in tests) -------------------------------------------------------
     def show_error(self, text):
         QMessageBox.critical(self.window, "Cannot open project", text)
+
+    def show_save_error(self, text):
+        self.window.statusBar().showMessage(text, 8000)
+        QMessageBox.warning(self.window, "Save failed", text)
 
     def show_warnings(self, warnings):
         QMessageBox.information(self.window, "Project opened with warnings",

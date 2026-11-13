@@ -169,3 +169,25 @@ def test_reference_values_at_m3_delta_hc_100mm():
     AAstar_f = iso.area_mach_ratio(r.M_f)
     h_t = h_c * (AAstar_f / AAstar_inf)
     assert h_t * 1000.0 == pytest.approx(30.26, abs=1e-2)
+    assert r.throat_height * 1000.0 == pytest.approx(30.26, abs=1e-2)       # M12: shown
+
+
+@pytest.mark.parametrize("M_inf, delta", [(3.0, 33.789), (2.2, 15.0), (5.0, 30.0), (3.0, 0.0)])
+def test_throat_height_is_the_continuity_area_ratio(M_inf, delta):
+    """Self-consistency: h_t = r_f sin(mu_f) from the geometry equals the 1D continuity
+    result h_c (A/A*)(M_f) / (A/A*)(M_inf) (NACA 1135 eq. (80), p. 618)."""
+    h_c = 0.1
+    r = ir.isentropic_ramp(M_inf, capture_height=h_c, delta_deg=delta)
+    expected = h_c * iso.area_mach_ratio(r.M_f) / iso.area_mach_ratio(M_inf)
+    assert r.throat_height == pytest.approx(expected, rel=1e-9)
+
+
+def test_engine_face_and_mil_are_separate_values():
+    """M12 fix: the window showed eta_MIL as the engine-face value. At M 3, delta 33.789 deg:
+    engine face = eta x diffuser recovery = 0.8809 x 0.97 = 0.854 (closed form); MIL-E-5008B
+    eta = 1 - 0.075 (M - 1)^1.35 = 0.809 (formula confirmed, verification.MIL_SOURCE)."""
+    r = ir.isentropic_ramp(M3, delta_deg=DELTA)
+    assert r.engine_face_recovery(0.97) == pytest.approx(r.recovery * 0.97, rel=1e-12)
+    assert round(r.engine_face_recovery(0.97), 3) == 0.854
+    assert r.mil_recovery == pytest.approx(1.0 - 0.075 * 2.0 ** 1.35, rel=1e-12)
+    assert round(r.mil_recovery, 3) == 0.809

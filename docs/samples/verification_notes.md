@@ -1,7 +1,7 @@
 # Busemann verification notes
 
 Written with: geometry DXF  
-Busemann 0.1.0 (commit 07f2235), 2026-11-13T13:24:35Z
+Busemann 1.0.0 (commit release), 2026-11-13T14:20:58Z
 
 ## Inputs
 

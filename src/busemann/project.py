@@ -4,7 +4,7 @@ Save writes the design geometry (layers RAMP, COWL, SHOCKS, millimetres, as the 
 export) and stores every input as a DXF custom header property:
 
     BUSEMANN_FORMAT = "busemann-dxf"      BUSEMANN_SCHEMA = 1
-    BUSEMANN_APP_VERSION = "0.1.0"        BUSEMANN_SAVED_UTC = "2026-11-04T10:00:00Z"
+    BUSEMANN_APP_VERSION = "1.0.0"        BUSEMANN_SAVED_UTC = "2026-11-04T10:00:00Z"
     BUSEMANN_<FIELD> = JSON of each Inputs field (BUSEMANN_MACH = 3.0, ...)
     BUSEMANN_VIEW = JSON {"layers": {...}, "tab": "design"}
 

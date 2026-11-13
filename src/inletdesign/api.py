@@ -22,7 +22,6 @@ from . import offdesign as _off
 from . import separation as _sep
 from . import standards as _std
 from .geometry import COWL_LIP_PREFIX, build_geometry, cowl_check, design_inlet
-from .offdesign import _deprecated_m_duct
 
 REAL_GAS_T0_LIMIT = 800.0  # K; above this, vibrational excitation makes constant gamma questionable
 SUBSONIC_WARNING = _off.SUBSONIC_WARNING
@@ -133,11 +132,6 @@ class DesignResult(_Serialisable):
     separation: tuple = ()          # separation.SeparationCheck per shock (approximate)
     separation_notices: tuple = ()  # Notice per flagged shock (not in `notices`)
 
-    @property
-    def M_duct(self):
-        """Deprecated alias of M_post_terminal (its old meaning for a design)."""
-        return _deprecated_m_duct(self.M_post_terminal, "M_post_terminal")
-
 
 @dataclass(frozen=True)
 class OffDesignResult(_Serialisable):
@@ -167,11 +161,6 @@ class OffDesignResult(_Serialisable):
     theta_max_lip_deg: float = None # theta_max at the lip Mach; None if the lip flow is subsonic
     separation: tuple = ()          # separation.SeparationCheck per shock (approximate)
     separation_notices: tuple = ()  # Notice per flagged shock (not in `notices`)
-
-    @property
-    def M_duct(self):
-        """Deprecated alias of M_pre_terminal (its old meaning off design)."""
-        return _deprecated_m_duct(self.M_pre_terminal, "M_pre_terminal")
 
 
 @dataclass(frozen=True)

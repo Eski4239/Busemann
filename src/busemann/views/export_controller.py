@@ -3,11 +3,16 @@ DXFs, Gmsh .geo and the results (JSON, CSV).
 
 Every export carries the metadata header (export.metadata). Save dialogs remember the last
 folder and propose names like busemann_M3.00_2ramp_geometry.dxf.
+
+M12: every write goes through write_guarded(): a file that cannot be written (read-only,
+locked by another program, bad folder, ezdxf error) shows one clear message and returns None;
+nothing raises and nothing fails silently. The isentropic window's exports use it too.
 """
 from pathlib import Path
 
+import ezdxf
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from inletdesign import api
 from inletdesign.cfd_domain import export_cfd_domain_dxf, export_offdesign_domain_dxf
@@ -15,6 +20,35 @@ from inletdesign.cfd_domain import export_cfd_domain_dxf, export_offdesign_domai
 from ..export import results as R
 from ..export.metadata import default_name, metadata
 from ..settings import app_settings
+
+EXPORT_ERRORS = (OSError, ValueError, ezdxf.DXFError)
+
+
+def error_text(path, exc):
+    """'Could not write <file>: <reason>. Is it open in another program?'"""
+    reason = (exc.strerror if isinstance(exc, OSError) and exc.strerror else str(exc)) \
+        or type(exc).__name__
+    return (f"Could not write {Path(path).name}: {reason.rstrip('.')}. "
+            "Is it open in another program?")
+
+
+def show_export_error(parent, text):
+    """Modal warning in the token style (QMessageBox picks up the app stylesheet)."""
+    box = QMessageBox(QMessageBox.Icon.Warning, "Export failed", text,
+                      QMessageBox.StandardButton.Ok, parent)
+    box.setObjectName("exportError")
+    box.exec()
+
+
+def write_guarded(path, write, report):
+    """Run write(); on an export error call report(error_text) and return None, else path."""
+    try:
+        write()
+    except EXPORT_ERRORS as exc:
+        report(error_text(path, exc))
+        return None
+    return path
+
 
 class ExportController(QObject):
     def __init__(self, window, menu):
@@ -58,7 +92,18 @@ class ExportController(QObject):
             self.settings.setValue("export/last_dir", str(Path(path).parent))
         return Path(path) if path else None
 
-    def _done(self, path):
+    def show_error(self, text):
+        """Shows an export error (replaced in tests, like ask_path)."""
+        show_export_error(self.window, text)
+
+    def _report(self, text):
+        self.window.statusBar().showMessage(text, 8000)
+        self.show_error(text)
+
+    def _write(self, path, write):
+        """Run write() for `path`; the status line on success, the error message otherwise."""
+        if write_guarded(path, write, self._report) is None:
+            return None
         self.window.statusBar().showMessage(f"Exported {path.name}", 5000)
         return path
 
@@ -78,24 +123,29 @@ class ExportController(QObject):
     def export_geometry(self):
         path = self._path("Export geometry DXF", default_name(self.state.inputs, "geometry",
                                                                "dxf"), "DXF drawing (*.dxf)")
-        if path:
-            from .. import project as P
+        if not path:
+            return None
+        from .. import project as P
 
-            meta = self._meta("geometry DXF")
-            meta.pop("inputs", None)                 # the inputs go in as BUSEMANN_* keys
+        meta = self._meta("geometry DXF")
+        meta.pop("inputs", None)                     # the inputs go in as BUSEMANN_* keys
+
+        def write():
             P.save(path, self.state.inputs, self.window.project.view(),
                    design=self.state.design, metadata=meta)     # reopens as the design
             self._notes(path, meta)
-            return self._done(path)
+        return self._write(path, write)
 
     def _cad(self, title, kind, ext, file_filter, writer, what):
         path = self._path(title, default_name(self.state.inputs, kind, ext), file_filter)
-        if path:
-            meta = self._meta(what)
+        if not path:
+            return None
+        meta = self._meta(what)
+
+        def write():
             writer(api.inlet_geometry(self.state.design), path, meta)
             self._notes(path, meta)
-            return self._done(path)
-        return None
+        return self._write(path, write)
 
     def export_gmsh(self):
         from inletdesign.export_cad import export_gmsh_geo
@@ -107,41 +157,48 @@ class ExportController(QObject):
         path = self._path("Export CFD domain DXF", default_name(self.state.inputs,
                                                                  "cfd_domain", "dxf"),
                           "DXF drawing (*.dxf)")
-        if path:
-            meta = self._meta("CFD domain DXF (design point)")
+        if not path:
+            return None
+        meta = self._meta("CFD domain DXF (design point)")
+
+        def write():
             export_cfd_domain_dxf(api.inlet_geometry(self.state.design), path,
                                   metadata=meta)
             self._notes(path, meta)
-            return self._done(path)
+        return self._write(path, write)
 
     def export_cfd_offdesign(self):
         path = self._path("Export off-design CFD domain DXF",
                           default_name(self.state.inputs, "cfd_offdesign_v2", "dxf"),
                           "DXF drawing (*.dxf)")
-        if path:
-            meta = self._meta("CFD domain DXF (off-design v2, normal OUTLET_EXT)")
+        if not path:
+            return None
+        meta = self._meta("CFD domain DXF (off-design v2, normal OUTLET_EXT)")
+
+        def write():
             export_offdesign_domain_dxf(
                 api.inlet_geometry(self.state.design), path, ext_outlet="normal",
                 metadata=meta)
             self._notes(path, meta)
-            return self._done(path)
+        return self._write(path, write)
 
     def export_json(self):
         path = self._path("Export results JSON",
                           default_name(self.state.inputs, "results", "json"), "JSON (*.json)")
-        if path:
-            s = self.state
-            R.write_json(path, self._meta("results JSON"), s.design, s.freestream,
-                         s.off_design, s.sweep)
-            return self._done(path)
+        if not path:
+            return None
+        s = self.state
+        return self._write(path, lambda: R.write_json(
+            path, self._meta("results JSON"), s.design, s.freestream, s.off_design, s.sweep))
 
     def export_csv(self):
         path = self._path("Export results CSV",
                           default_name(self.state.inputs, "results", "csv"), "CSV (*.csv)")
-        if path:
-            s = self.state
-            off = self._is_off()
-            regions = (s.off_design if off else s.design).regions
-            view = f"off-design at M∞ {s.off_design.M_inf:.2f}" if off else "design point"
-            R.write_csv(path, self._meta("results CSV"), regions, s.sweep, view)
-            return self._done(path)
+        if not path:
+            return None
+        s = self.state
+        off = self._is_off()
+        regions = (s.off_design if off else s.design).regions
+        view = f"off-design at M∞ {s.off_design.M_inf:.2f}" if off else "design point"
+        return self._write(path, lambda: R.write_csv(
+            path, self._meta("results CSV"), regions, s.sweep, view))

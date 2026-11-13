@@ -213,6 +213,12 @@ existing left panel drives it.
   in a simple wave p is constant along each straight characteristic.
 - Exports the contour as geometry DXF (+ verification notes). Comparison line to the
   multi-ramp design's recovery.
+- M12: token styling as the main window; result cards (recovery; "Engine face ≈ η × diffuser
+  recovery" using the main design's diffuser recovery; "MIL-E-5008B" as a separate
+  reference; final Mach; duct entry height h<sub>t</sub> = r<sub>f</sub> sin μ<sub>f</sub>; cowl
+  margin; wall length); p/p∞ legend; hatched wall and cowl drawn with the main canvas's
+  geometry helpers; terminal normal shock at the duct entry; drawing framed to the view.
+  Export errors are reported like the main window's (section A).
 
 ## H. Release (M12)
 

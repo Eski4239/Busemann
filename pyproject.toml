@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "supersonic-inlet-designer"
-version = "0.1.0"
+dynamic = ["version"]              # busemann.__version__ is the single source
 description = "2D external-compression supersonic inlet design tool"
 requires-python = ">=3.11"
 dependencies = [
@@ -16,11 +16,14 @@ dependencies = [
 
 [project.optional-dependencies]
 app = ["PySide6>=6.10", "pyqtgraph>=0.13"]
-dev = ["pytest", "pytest-qt"]
+dev = ["pytest", "pytest-qt", "build"]
 
 [project.scripts]
 inletdesign = "inletdesign.cli:main"
 busemann = "busemann.app:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "busemann.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -37,7 +40,9 @@ busemann = [
     "resources/licenses/*.txt",
     "resources/licenses/*.json",
     "resources/examples/*.dxf",
-    "resources/images/*.png",
+    "resources/brand/*.svg",
+    "resources/brand/*.png",
+    "resources/brand/*.ico",
 ]
 
 [tool.pytest.ini_options]

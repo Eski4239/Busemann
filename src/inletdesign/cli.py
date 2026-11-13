@@ -32,8 +32,8 @@ class CliError(Exception):
 def _package_version():
     try:
         return version("supersonic-inlet-designer")
-    except PackageNotFoundError:
-        return "0.1.0"
+    except PackageNotFoundError:            # running from a source tree that is not installed
+        return "unknown"
 
 
 def _cumulative_angles(ramp_angles_deg):

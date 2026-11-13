@@ -289,25 +289,37 @@ def _normal_downstream(angle_deg):
     return (math.sin(a), -math.cos(a))
 
 
+def wall_band(surface, h):
+    """Hatched band under a ramp surface polyline (leading edge first): WALL_THICKNESS h_c
+    thick, chamfered at the leading edge. Shared by the main canvas and the isentropic ramp."""
+    le = surface[0]
+    t = WALL_THICKNESS * h
+    lower = [(p[0], p[1] - t) for p in surface[1:]]
+    return list(surface) + lower[::-1] + [(le[0] + 2.5 * t, le[1] - t)]
+
+
+def cowl_wedge(lip, duct_angle_deg, h, wedge_deg, length=DUCT_LENGTH):
+    """Cowl drawn as a wedge from the lip: inner face along the duct direction, outer face
+    wedge_deg above it (at least MIN_DRAWN_WEDGE_DEG for visibility), `length` h_c long.
+    Returns (polygon, inner end, outer end)."""
+    wedge = max(wedge_deg, MIN_DRAWN_WEDGE_DEG)
+    inner_end = _add(lip, _dir(duct_angle_deg), length * h)
+    outer_end = _add(lip, _dir(duct_angle_deg + wedge),
+                     length * h / math.cos(math.radians(wedge)))
+    return [lip, inner_end, outer_end], inner_end, outer_end
+
+
 def build(sk):
     h = sk.h
     duct = _dir(sk.phi_n)
     le = sk.corners[0] if sk.corners else sk.foot
     floor_end = _add(sk.foot, duct, DUCT_LENGTH * h)
-    cowl_end = _add(sk.lip, duct, DUCT_LENGTH * h)
 
     ramp_surface = _dedupe([le, *sk.corners[1:], sk.foot, floor_end])
+    ramp_body = wall_band(ramp_surface, h)
+    cowl_body, cowl_end, cowl_outer_end = cowl_wedge(sk.lip, sk.phi_n, h, sk.drawn_wedge_deg)
     domain = _dedupe([(sk.x_left, 0.0), (min(0.0, le[0]), 0.0), *ramp_surface,
                       cowl_end, sk.lip, (sk.x_left, h)])
-
-    t = WALL_THICKNESS * h
-    lower = [(p[0], p[1] - t) for p in ramp_surface[1:]]
-    ramp_body = ramp_surface + lower[::-1] + [(le[0] + 2.5 * t, le[1] - t)]
-
-    wedge = sk.drawn_wedge_deg
-    wedge_len = DUCT_LENGTH * h / math.cos(math.radians(wedge))
-    cowl_outer_end = _add(sk.lip, _dir(sk.phi_n + wedge), wedge_len)
-    cowl_body = [sk.lip, cowl_end, cowl_outer_end]
 
     pic = Picture(skeleton=sk, domain=domain, ramp_surface=ramp_surface, ramp_body=ramp_body,
                   cowl_body=cowl_body, cowl_inner=[sk.lip, cowl_end],
