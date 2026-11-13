@@ -1,0 +1,66 @@
+name: release
+
+# Pushing a tag v<version> (equal to busemann.__version__) builds the Windows release with
+# tools/build_release.ps1 (clean venv, PyInstaller one-folder build, frozen self-test, Inno
+# Setup installer, portable zip, SHA256SUMS.txt) and publishes it as the GitHub Release
+# "Busemann <version>", with that version's CHANGELOG.md section as the release notes.
+# The frozen self-test log is uploaded as a workflow artifact whether the job passes or fails.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write          # create the release and upload its assets
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"        # the version the local release build was tested with
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Release notes (tag must equal busemann.__version__)
+        run: python tools/changelog_section.py "$env:GITHUB_REF_NAME" build/release_notes.md
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Build, self-test and package
+        # a fresh runner's first start of the new exe can be slow (file scanning): 300 s
+        run: ./tools/build_release.ps1 -Python python -SelfTestTimeout 300 -SelfTestLog build/selftest.log
+
+      - name: Upload the self-test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-log
+          path: build/selftest.log
+          if-no-files-found: warn
+
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.Substring(1)
+          $assets = @("dist/Busemann-Setup-$version.exe", "dist/Busemann-$version-portable.zip",
+                      "dist/SHA256SUMS.txt")
+          foreach ($a in $assets) { if (-not (Test-Path $a)) { throw "missing release asset $a" } }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            # a re-run of the same tag: replace the assets, keep the release
+            gh release upload $tag @assets --clobber
+          } else {
+            gh release create $tag @assets --title "Busemann $version" --notes-file build/release_notes.md --verify-tag
+          }
+          if ($LASTEXITCODE -ne 0) { throw "gh release failed ($LASTEXITCODE)" }

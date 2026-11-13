@@ -8,7 +8,7 @@
     1. clean build\venv, build\pyinstaller and the previous dist\ outputs;
     2. a clean venv in build\venv: pip install ".[app]" pyinstaller (PySide6-Essentials only);
     3. pyinstaller packaging\busemann.spec -> dist\Busemann\ (+ LICENSE, THIRD-PARTY-NOTICES.txt);
-    4. dist\Busemann\Busemann.exe --self-test --self-test-log <temp>: the build fails unless
+    4. dist\Busemann\Busemann.exe --self-test --self-test-log <SelfTestLog>: the build fails unless
        the exe exits 0 within the timeout AND the log exists AND contains "self-test: OK";
     5. start-up time to the welcome window (informational, isolated settings);
     6. ISCC packaging\busemann.iss -> dist\Busemann-Setup-<version>.exe;
@@ -18,17 +18,22 @@
 .PARAMETER Python
   Interpreter used to create the build venv (default: python on PATH).
 .PARAMETER Iscc
-  ISCC.exe to use; default: the per-user install, then PATH, then the standard folders.
+  ISCC.exe to use; default: ISCC.exe on PATH, then Program Files (x86)\Inno Setup 6, then
+  %LOCALAPPDATA%\Programs\Inno Setup 6 (a per-user Inno Setup install).
 .PARAMETER SkipInstaller
   Build, self-test and zip, without the Inno Setup step.
 .PARAMETER SelfTestTimeout
-  Seconds the frozen self-test may take (default 120).
+  Seconds the frozen self-test may take (default 120; the release workflow passes 300).
+.PARAMETER SelfTestLog
+  Where the frozen self-test writes its log (default build\selftest.log). It is kept after the
+  build; when the exe writes none, this file says so (the release workflow uploads it).
 #>
 param(
     [string]$Python = "python",
     [string]$Iscc = "",
     [switch]$SkipInstaller,
-    [int]$SelfTestTimeout = 120
+    [int]$SelfTestTimeout = 120,
+    [string]$SelfTestLog = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,16 +59,15 @@ function Format-MB($bytes) { "{0:N1} MB" -f ($bytes / 1MB) }
 function Stop-Tree($id) {
     # kill a process and its children (the equation render process); output discarded, no
     # stderr redirection (a redirected native stderr line is fatal in Windows PowerShell 5.1)
-    $p = Start-Process -FilePath "taskkill.exe" -ArgumentList "/PID $id /T /F" -NoNewWindow `
-        -Wait -PassThru -RedirectStandardOutput ([System.IO.Path]::GetTempFileName()) `
-        -RedirectStandardError ([System.IO.Path]::GetTempFileName())
+    Start-Process -FilePath "taskkill.exe" -ArgumentList "/PID $id /T /F" -NoNewWindow -Wait `
+        -RedirectStandardOutput ([System.IO.Path]::GetTempFileName()) `
+        -RedirectStandardError ([System.IO.Path]::GetTempFileName()) | Out-Null
 }
 
 function Find-Iscc {
     param([string]$Explicit)
     $candidates = @()
     if ($Explicit) { $candidates += $Explicit }
-    $candidates += "C:\Users\Usuario\AppData\Local\Programs\Inno Setup 6\ISCC.exe"
     $onPath = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
     if ($onPath) { $candidates += $onPath.Source }
     $candidates += "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
@@ -86,6 +90,8 @@ $VPy = Join-Path $Venv "Scripts\python.exe"
 $Setup = Join-Path $Dist "Busemann-Setup-$Version.exe"
 $Zip = Join-Path $Dist "Busemann-$Version-portable.zip"
 $Sums = Join-Path $Dist "SHA256SUMS.txt"
+if (-not $SelfTestLog) { $SelfTestLog = Join-Path $Root "build\selftest.log" }
+$SelfTestLog = [System.IO.Path]::GetFullPath($SelfTestLog)
 
 # find ISCC before the long build, so a missing Inno Setup fails at once
 $IsccExe = $null
@@ -125,7 +131,9 @@ Invoke-Native $VPy @("tools\make_notices.py", (Join-Path $App "THIRD-PARTY-NOTIC
 
 # --- 4. frozen self-test -------------------------------------------------------------------
 Step "Self-test of the frozen exe (timeout $SelfTestTimeout s)"
-$log = Join-Path ([System.IO.Path]::GetTempPath()) ("busemann-selftest-" + [guid]::NewGuid().ToString("N") + ".log")
+$log = $SelfTestLog
+if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
 $info = New-Object System.Diagnostics.ProcessStartInfo
 $info.FileName = $Exe
 $info.Arguments = "--self-test --self-test-log `"$log`""
@@ -144,16 +152,25 @@ if (-not $finished) {
 }
 $logText = if (Test-Path -LiteralPath $log) { Get-Content -Raw -LiteralPath $log -Encoding UTF8 } else { $null }
 $passed = ($finished -and $code -eq 0 -and $logText -and $logText.Contains("self-test: OK"))
+$status = "exit code: $code, after $([int]$timer.Elapsed.TotalSeconds) s (timeout $SelfTestTimeout s)"
 if (-not $passed) {
-    Write-Host "Self-test FAILED (exit code: $code, after $([int]$timer.Elapsed.TotalSeconds) s)" -ForegroundColor Red
-    if ($logText) { Write-Host $logText }
-    else { Write-Host "no log written $EmDash the exe crashed before the self-test started" }
+    Write-Host "Self-test FAILED ($status)" -ForegroundColor Red
+    if ($logText) {
+        Write-Host $logText
+        Add-Content -LiteralPath $log -Value "build_release.ps1: FAILED ($status)" -Encoding UTF8
+    } else {
+        $missing = "no log written $EmDash the exe crashed before the self-test started"
+        Write-Host $missing
+        # the uploaded artifact still says what happened
+        [System.IO.File]::WriteAllText($log, "$missing`nbuild_release.ps1: FAILED ($status)`n",
+                                       (New-Object System.Text.UTF8Encoding($false)))
+    }
     throw "frozen self-test failed"
 }
 $SelfTestLine = ($logText -split "`r?`n")[0]
 Write-Host $SelfTestLine -ForegroundColor Green
-Write-Host ("  (process wall time {0:N1} s)" -f $timer.Elapsed.TotalSeconds)
-Remove-Item -LiteralPath $log -Force
+Write-Host ("  (process wall time {0:N1} s; log kept at {1})" -f $timer.Elapsed.TotalSeconds, $log)
+Add-Content -LiteralPath $log -Value "build_release.ps1: passed ($status)" -Encoding UTF8
 
 # --- 5. start-up time to the welcome window (informational) --------------------------------
 Step "Start-up time to the welcome window"

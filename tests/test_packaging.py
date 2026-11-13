@@ -150,16 +150,27 @@ def test_build_script_is_ascii_for_windows_powershell():
 
 
 def test_build_script_finds_iscc_in_the_agreed_order():
-    order = [PS1.index(s) for s in (
-        r"C:\Users\Usuario\AppData\Local\Programs\Inno Setup 6\ISCC.exe",
+    """-Iscc, then PATH, then Program Files (x86), then %LOCALAPPDATA% (per-user install)."""
+    find = PS1[PS1.index("function Find-Iscc"):]
+    find = find[:find.index("\n}\n")]
+    order = [find.index(s) for s in (
+        "if ($Explicit)",
         'Get-Command "ISCC.exe"',
         r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        r'Programs\Inno Setup 6\ISCC.exe") }')]
+        r'Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"')]
     assert order == sorted(order)
+
+
+def test_build_script_has_no_personal_paths():
+    assert not re.search(r"[A-Z]:\\Users\\", PS1, re.I)
+    assert "Usuario" not in PS1
 
 
 def test_build_script_self_test_rules():
     assert "[int]$SelfTestTimeout = 120" in PS1
+    assert '[string]$SelfTestLog = ""' in PS1
+    assert r'Join-Path $Root "build\selftest.log"' in PS1            # kept for the artifact
+    assert "no log written $EmDash the exe crashed" in PS1
     assert "--self-test --self-test-log" in PS1
     assert '$code -eq 0' in PS1 and 'Contains("self-test: OK")' in PS1
     assert "the exe crashed before the self-test started" in PS1
