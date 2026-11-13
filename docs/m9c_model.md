@@ -1,3 +1,5 @@
+> **Removed before 1.0 (M12).** This model is not part of Busemann 1.0; the note is kept as a design record (addendum D.3).
+
 # M9c model note: inlet characteristic (recovery vs mass-flow ratio) and buzz
 
 Status: **implemented in M9c** (`src/inletdesign/characteristic.py`, Analytics ▸ Inlet

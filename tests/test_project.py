@@ -125,6 +125,21 @@ def test_unknown_properties_warn_and_defaults_fill_in(tmp_path):
     assert warnings == ["unknown property 'BUSEMANN_WARP_DRIVE' ignored"]
 
 
+def test_retired_diffuser_area_ratio_loads_without_a_warning(tmp_path):
+    """Designs saved before 1.0 carry BUSEMANN_DIFFUSER_AREA_RATIO (inlet characteristic,
+    removed before 1.0): ignored silently, everything else restored."""
+    doc = ezdxf.new()
+    for key, value in (("FORMAT", "busemann-dxf"), ("SCHEMA", "1"), ("MACH", "2.8"),
+                       ("DIFFUSER_AREA_RATIO", "2.5")):
+        doc.header.custom_vars.append(f"BUSEMANN_{key}", value)
+    path = tmp_path / "pre_1_0.dxf"
+    doc.saveas(path)
+    inputs, view, warnings = P.load(path)
+    assert inputs == Inputs(mach=2.8) and warnings == []
+    assert "diffuser_area_ratio" not in {f.name for f in dataclasses.fields(Inputs)}
+    assert "BUSEMANN_DIFFUSER_AREA_RATIO" not in P.header_values(Inputs())
+
+
 @pytest.mark.parametrize("key, text, message", [
     ("BUSEMANN_MACH", "\"fast\"", "invalid value"),
     ("BUSEMANN_N_RAMPS", "2.5", "invalid value"),

@@ -48,3 +48,7 @@ desktop.ini
 # Generated example outputs
 examples/output/
 results/
+
+# Local working files (reference-figure crops, scratch CFD domain exports)
+references/_*.png
+cfd/offdesign_domain*.dxf

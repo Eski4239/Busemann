@@ -1,0 +1,30 @@
+# Exact versions for the Windows release build (tools/build_release.ps1 installs these, then
+# `pip install --no-deps .`). Frozen from the build venv of the M12 build whose frozen
+# self-test passed (Python 3.14, 2026-11-13): the app's runtime dependencies (the "app"
+# extra: PySide6-Essentials, pyqtgraph, numpy, scipy, matplotlib, ezdxf and what they pull
+# in) plus PyInstaller. Regenerate after changing a dependency:
+#   build\venv\Scripts\python.exe -m pip freeze --exclude supersonic-inlet-designer --exclude pip
+altgraph==0.17.5
+colorama==0.4.6
+contourpy==1.4.0
+cycler==0.12.1
+ezdxf==1.4.5
+fonttools==4.68.0
+kiwisolver==1.5.1
+matplotlib==3.11.2
+numpy==2.5.4
+packaging==26.3
+pefile==2024.8.26
+pillow==13.0.0
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
+pyparsing==3.3.3
+pyqtgraph==0.14.0
+PySide6_Essentials==6.12.0
+python-dateutil==4.0.0
+pywin32-ctypes==0.2.3
+scipy==1.18.1
+setuptools==84.2.1
+shiboken6==6.12.0
+typing_extensions==4.16.0
+tzdata==2026.6

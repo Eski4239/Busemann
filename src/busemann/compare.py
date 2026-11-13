@@ -19,7 +19,6 @@ from .inputs import design_sweep, freestream_for
 DEFAULT_NAME = "Pinned design"
 LIVE_NAME = "Current design"
 DASH = "—"
-NOT_COMPUTED = "not computed"
 IMPORTED_NOTE = "imported geometry — flight conditions unknown, current flight conditions used"
 DIFFERENT_CONDITIONS = "A and B use different flight conditions"
 METHOD_TEXT = {"oswatitsch": "optimum angles", "custom": "custom angles"}
@@ -105,9 +104,6 @@ class Evaluated:
     """A snapshot plus everything the table needs (computed off the GUI thread)."""
     snapshot: Snapshot
     slider_mach: float
-    stable_range: float = None     # critical − onset A0/Ac at the slider Mach
-    stable_note: str = DASH        # cell text when stable_range is None
-    stable_reason: str = None      # tooltip: why it is not computed
     cd_cowl: float = None          # C_D,cowl at the design Mach
     cd_reason: str = None
     mdot_span: float = None        # captured kg/s per metre of span
@@ -138,28 +134,7 @@ def evaluate(snapshot, slider_mach):
         out["mdot_span"] = api.captured_mass_flow(snapshot.freestream, h, d.mass_capture)
         if i.inlet_width_m:
             out["mdot_total"] = out["mdot_span"] * i.inlet_width_m
-    out.update(_stable(d, i, slider_mach))
     return Evaluated(snapshot, slider_mach, **out)
-
-
-def _stable(d, inputs, M):
-    if not d.inputs.n_ramps:
-        return dict(stable_reason="no ramps: no inlet characteristic")
-    try:
-        off = api.off_design_point(d, M)
-    except ValueError as exc:
-        return dict(stable_reason=str(exc))
-    try:
-        c = api.inlet_characteristic(d, off, inputs.diffuser_area_ratio)
-    except ValueError as exc:
-        return dict(stable_note=NOT_COMPUTED, stable_reason=str(exc))
-    if not c.valid:
-        return dict(stable_note=NOT_COMPUTED, stable_reason=c.note)
-    if c.buzz is None:
-        return dict(stable_note=NOT_COMPUTED,
-                    stable_reason="above the design Mach: the subcritical branch is not "
-                                  "modelled")
-    return dict(stable_range=max(0.0, c.critical.mfr - c.buzz.mfr))
 
 
 # --- metrics ---------------------------------------------------------------------------------
@@ -208,9 +183,6 @@ METRICS = (
     Metric("sep_flags", "Separation flags", "results", digits=0, better="lower",
            why="Lower is better: fewer shocks predicted to separate the boundary layer "
                "(approximate).", percent=False),
-    Metric("stable", "Stable subcritical range at M∞ {M:.2f}", "results", digits=3,
-           better="higher",
-           why="Higher is better: the inlet can spill more before buzz (approximate)."),
 )
 METRIC = {m.key: m for m in METRICS}
 
@@ -274,7 +246,7 @@ def _value(ev, key, k=None):
             "mdot_span": ev.mdot_span, "mdot_total": ev.mdot_total,
             "M_post": d.M_post_terminal, "cowl_angle": d.cowl_angle_deg,
             "cowl_margin": d.cowl_margin_deg, "cd_cowl": ev.cd_cowl,
-            "sep_flags": ev.sep_flags, "stable": ev.stable_range}[key]
+            "sep_flags": ev.sep_flags}[key]
 
 
 def _display(m, v, units):
@@ -305,9 +277,6 @@ def _cell(m, ev, v, units):
                                             f"diffuser {ev.snapshot.inputs.diffuser_recovery:.3f}"
                                             f"); MIL-E-5008B {ev.mil:.4f} at M∞ "
                                             f"{ev.design.inputs.M:.2f}.")
-    if m.key == "stable" and v is None and ev.design is not None:
-        reason = ev.stable_reason
-        return ev.stable_note, (reason[:1].upper() + reason[1:] + ".") if reason else None
     if m.key == "cd_cowl" and v is None and ev.design is not None and ev.cd_reason:
         return DASH, ev.cd_reason[:1].upper() + ev.cd_reason[1:] + "."
     if v is None and ev.design is None and METRIC[m.key].group == "results":
@@ -350,17 +319,13 @@ def table(a, b, units="SI"):
             continue
         rows.append(_row(m, a, b, units))
     rows.append(Row("Results", "", "", section=True))
-    M = next((e.slider_mach for e in (b, a) if e is not None), None)
     for m in METRICS:
         if m.group != "results":
             continue
         if m.key == "mdot_total" and not any(e is not None and e.snapshot.inputs.inlet_width_m
                                              for e in (a, b)):
             continue
-        label = m.label.format(M=M) if m.key == "stable" and M is not None else None
-        if m.key == "stable" and M is None:
-            label = "Stable subcritical range"
-        rows.append(_row(m, a, b, units, label))
+        rows.append(_row(m, a, b, units))
     return rows
 
 

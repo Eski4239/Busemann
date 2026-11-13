@@ -587,6 +587,12 @@ def main(argv=None):
         from .selftest import main as self_test
 
         return self_test(args)
+    if "--screenshots" in args:               # README images from the real (frozen) app
+        set_windows_app_id()
+        setup_high_dpi()
+        from .screenshots import main as screenshots
+
+        return screenshots(args)
     from .explain.mathsvg import prune_cache
 
     prune_cache()                             # equation cache: drop old files, cap the size

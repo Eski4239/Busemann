@@ -78,7 +78,7 @@ menus or windows, never extra rows on existing panels unless listed here.
    buzz, cowl detachment, real gas, upper-bound recovery, drag estimates), each with
    severity, the criterion used, its source and "must be verified with a CFD solver".
 
-## D. Analytics tab (M9; D.1 in M9a, D.2 in M9b, D.3 in M9c) — all approximate items titled "(approximate)"
+## D. Analytics tab (M9; D.1 in M9a, D.2 in M9b; D.3 (M9c) removed before 1.0) — all approximate items titled "(approximate)"
 
 1. **Trade study (M9a, shipped; exact within the model, no "approximate" label):** a
    segmented control "Recovery vs turning" | "Recovery vs design Mach".
@@ -124,30 +124,16 @@ menus or windows, never extra rows on existing panels unless listed here.
      subcritical spillage, the cowl beyond its frontal height, 3D effects).
    - M9a fixes: the turning takeaway compares at equal turning first, then the
      unconstrained optima; zoom / fit are hidden on the Analytics and Compare tabs.
-3. **Inlet characteristic and buzz (M9c, shipped; approximate; model note
-   `docs/m9c_model.md`):** Analytics ▸ "Inlet characteristic", for the design at the
-   off-design slider Mach.
-   - Critical point (existing model); supercritical branch, quasi-1D, for the new input
-     "Diffuser exit/entry area ratio" (Design ▸ Advanced, 1–4, default 2, display-only);
-     ideal flat subcritical branch, MFR = MFR_crit (1 − τ).
-   - Expelled-shock position: Moeckel, NACA TN 1921, applied to the flow behind the last
-     ramp shock (Busemann extension: M_n, μ_n, η = λ_S(M_n) from θ_n).
-   - Buzz onset: Ferri & Nucci, NACA RM L50K30 — the vortex sheet from the triple point
-     enters the cowl; exact shock-polar triple point, with the sheet along θ_n as the
-     fallback where the polars do not intersect. Labelled "approximate"; "extrapolated
-     beyond the tested Mach range" for M∞ > 2.7; the 2D multi-ramp application is stated
-     as a Busemann extension. The on-lip case has no stable range (Ferri & Nucci p. 7).
-   - Separation: a line under the chart and a Verification warning "Ramp separation
-     reduces the buzz margin (approximate)" whenever the separation check flags a ramp
-     shock. Not modelled above the design Mach (shock-in-duct).
-   - M9c.1: computed on a worker thread (debounced, stale results dropped, cached by design,
-     M∞ and area ratio; the GUI thread only draws, under 50 ms). Validity limit M_n ≥ 1.2
-     (TN 1921 p. 14; number from fig. 7, p. 29): below it a shaded band "outside the
-     method's validity …" and no buzz onset. x axis [min(onset, critical) − 0.05,
-     critical + 0.03] (±0.05 about the critical point when the range is zero); no recovery
-     curve past the onset, which is shaded "buzz (unsteady, approximate)"; where the
-     triple point has no regular solution the hover says "no regular triple point; vortex
-     sheet taken along θₙ".
+3. **Inlet characteristic and buzz (M9c): removed before 1.0 (M12, user decision).** The
+   Analytics "Inlet characteristic" view (critical point, quasi-1D supercritical branch,
+   Moeckel expelled shock, Ferri & Nucci buzz onset), its worker and cache, the "Diffuser
+   exit/entry area ratio" input, the Compare row "stable subcritical range", their
+   tooltips and Verification item, `inletdesign/characteristic.py`, the `api`
+   functions `inlet_characteristic`, `moeckel_shock` and `buzz_onset`, and their tests are
+   gone. Kept: the Verification warning "Ramp separation reduces the buzz margin
+   (approximate)" (Ferri & Nucci, NACA RM L50K30) whenever the separation check flags a ramp
+   shock. Designs saved with `BUSEMANN_DIFFUSER_AREA_RATIO` open without a warning (retired
+   field). The model note `docs/m9c_model.md` is kept as a record only.
 
 ## E. Verification notes export
 
@@ -189,8 +175,8 @@ existing left panel drives it.
       width, cowl wedge.
     - Result rows: total recovery; engine face vs MIL-E-5008B; mass capture; captured ṁ
       (per span, and in total when a width is set); M after the terminal shock; cowl
-      angle; cowl margin; cowl drag coefficient at design; separation flags; stable
-      subcritical range at the off-design slider Mach (or "not computed").
+      angle; cowl margin; cowl drag coefficient at design; separation flags. (The "stable
+      subcritical range" row was removed with the inlet characteristic before 1.0, D.3.)
     - Δ is coloured ok/warn only by the metric's better direction, with a tooltip saying
       why; other rows stay neutral. "Copy table" copies tab-separated text.
   - **Bottom:** "Off-design curves", collapsed by default. Capture, recovery and cowl
@@ -231,6 +217,12 @@ isentropic case, renders one Explain equation in the spawn-started warm-up proce
 be a separate process, into an empty cache folder) and round-trips a DXF. One summary line;
 exit 0, or the position of the first failing item, which the summary names. The release build
 runs it on the frozen exe and fails on a non-zero code.
+
+`busemann --screenshots DIR` (M12, `busemann/screenshots.py`): saves the README images
+(Design, Off-design at M∞ 2.60 with charts, Analytics, Isentropic ramp) from the real app
+with isolated settings, each after its workers finish; docs/screenshots/readme_*.png are
+taken with it from the installed release build. The release build is pinned by
+packaging/requirements-build.txt.
 
 ## I. Design files: DXF (M8.2)
 
@@ -308,7 +300,7 @@ The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
    interactive solver to design these geometries allows one to learn quite a bit. I hope
    this tool is useful to you and you learn something new along the way too!"
 2. **About ▸ How it was checked:** one paragraph replaces the validation table (NACA
-   Report 1135 relations, over 800 automated tests, Ansys Fluent 2D CFD inviscid and
+   Report 1135 relations, over 1,000 automated tests, Ansys Fluent 2D CFD inviscid and
    k-ω SST with a mesh check; design point within 0.35 %, below design within 0.1 %
    recovery and 0.4 % capture, viscous about 2 % lower with the second-corner bubble,
    above design an upper bound, CFD 4.9 % lower at Mach 3.25). The same paragraph is

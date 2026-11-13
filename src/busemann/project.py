@@ -37,6 +37,9 @@ _INSUNITS_TO_M = {0: 1e-3, 1: 0.0254, 2: 0.3048, 4: 1e-3, 5: 1e-2, 6: 1.0}  # 0:
 
 # schema n -> function(data at schema n) -> data at schema n + 1 (none yet).
 MIGRATIONS = {}
+# Inputs fields that existed in schema 1 and were removed without a schema bump: ignored on
+# load, without a warning (DIFFUSER_AREA_RATIO: the inlet characteristic, removed before 1.0).
+RETIRED_FIELDS = {"DIFFUSER_AREA_RATIO"}
 
 
 class ProjectError(ValueError):
@@ -168,7 +171,7 @@ def from_header(header, name="project"):
         if not key.startswith(PREFIX):
             continue                                     # other drawing properties
         short = key[len(PREFIX):]
-        if short in meta:
+        if short in meta or short in RETIRED_FIELDS:
             continue
         field = fields.get(short)
         if field is None:

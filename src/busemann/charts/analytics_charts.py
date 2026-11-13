@@ -23,9 +23,7 @@ N_COLORS = {0: tokens.COLORS["text_muted"], 1: "#93B4F2", 2: "#5B8DEF",
 SPECIAL = {"isentropic": tokens.COLORS["text"], "mil": tokens.COLORS["warn"],
            "theta": tokens.COLORS["error"],
            # drag (M9b): additive, cowl and their sum
-           "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"],
-           # inlet characteristic (M9c)
-           "super": tokens.COLORS["accent"], "sub": tokens.COLORS["accent"]}
+           "add": "#5B8DEF", "cowl": tokens.COLORS["warn"], "total": tokens.COLORS["text"]}
 DASHED = ("isentropic", "mil", "theta", "total")
 BAND_ALPHA = 28
 BAND_WRAP = 30                # characters per line of a band label

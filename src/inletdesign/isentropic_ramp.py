@@ -37,8 +37,8 @@ only stagnation-pressure loss is the terminal normal shock at M_f.
 
 Validity: M_f >= 1 is required (ValueError otherwise). Below MIN_RECOMMENDED_MF = 1.2 the
 result is still returned (not raised) but carries a warning: the terminal shock is very weak
-and the design is sensitive (mirrors characteristic.py's MOECKEL_MIN_MACH convention -- a
-constant plus a note on the result, not a hard failure). Above the lip, in reality the
+and the design is sensitive (a constant plus a note on the result, not a hard failure).
+Above the lip, in reality the
 characteristics converge and coalesce into a shock; this is not modelled here.
 """
 import math

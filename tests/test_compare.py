@@ -29,11 +29,11 @@ def test_metric_list_and_better_directions():
     assert keys == ["mach", "altitude", "p", "T", "n_ramps", "method", "ramp", "capture_height",
                     "width", "wedge", "recovery", "face", "mass_capture", "mdot_span",
                     "mdot_total", "M_post", "cowl_angle", "cowl_margin", "cd_cowl",
-                    "sep_flags", "stable"]
+                    "sep_flags"]
     better = {m.key: m.better for m in C.METRICS if m.better}
     assert better == {"recovery": "higher", "face": "higher", "mass_capture": "higher",
                       "cowl_angle": "lower", "cowl_margin": "higher", "cd_cowl": "lower",
-                      "sep_flags": "lower", "stable": "higher"}
+                      "sep_flags": "lower"}
     assert all(m.why and m.why.startswith(("Higher", "Lower")) for m in C.METRICS if m.better)
     assert all(m.group == "inputs" for m in C.METRICS if m.better is None and m.key in
                ("mach", "altitude", "p", "T", "n_ramps", "method", "ramp"))
@@ -73,22 +73,11 @@ def test_engine_face_cell_and_mil(pair):
     assert row.a == f"{face:.3f} vs {api.mil_recovery(3.0):.3f}"
 
 
-def test_stable_range_is_critical_minus_onset(pair):
-    a, _ = pair
-    off = api.off_design_point(a.design, 2.75)
-    c = api.inlet_characteristic(a.design, off, a.snapshot.inputs.diffuser_area_ratio)
-    assert a.stable_range == pytest.approx(c.critical.mfr - c.buzz.mfr, abs=1e-15)
-    assert "at M∞ 2.75" in [r.label for r in C.table(*pair)][-1]
-
-
-@pytest.mark.parametrize("M, note", [(2.5, C.NOT_COMPUTED),       # below Moeckel's limit
-                                     (3.2, C.NOT_COMPUTED),       # above the design Mach
-                                     (1.3, C.DASH)])              # ramp shocks detached
-def test_stable_range_not_computed_outside_the_model(M, note):
-    ev = C.evaluate(C.snapshot_from_inputs(Inputs()), M)
-    assert ev.stable_range is None and ev.stable_note == note and ev.stable_reason
-    row = [r for r in C.table(ev, ev) if r.label.startswith("Stable")][0]
-    assert row.a == note and row.delta == C.DASH and row.verdict is None
+def test_no_inlet_characteristic_row(pair):
+    """The inlet characteristic (stable subcritical range) was removed before 1.0."""
+    labels = [r.label for r in C.table(*pair)]
+    assert not any("subcritical" in lb.lower() or "stable" in lb.lower() for lb in labels)
+    assert not hasattr(pair[0], "stable_range")
 
 
 def test_missing_ramps_show_a_dash(pair):

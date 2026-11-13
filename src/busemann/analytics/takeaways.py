@@ -123,26 +123,3 @@ def recovery_vs_cowl(M, n, recovery, cd, matches):
         return text + "; the same recovery costs " + _join(parts) + "."
     return text + ("." if base == 4 else "; no other ramp count reaches it with an attached "
                    "cowl shock.")
-
-
-# --- inlet characteristic (M9c) ---------------------------------------------------------------
-def characteristic(c):
-    """One line for an inletdesign.characteristic.Characteristic."""
-    crit, end = c.critical.recovery, c.supercritical[-1].recovery
-    tail = (f"; at maximum supercritical flow the recovery falls from {crit:.3f} to "
-            f"{end:.3f}.")
-    if not c.valid:
-        from inletdesign.characteristic import MOECKEL_MIN_MACH
-
-        return (f"At M∞ {c.M_inf:.2f} the flow behind the last ramp is near Mach 1 "
-                f"(M<sub>n</sub> {c.M_n:.2f}, below {MOECKEL_MIN_MACH:g}), outside Moeckel's "
-                "method: "
-                "the stable subcritical range is not computed" + tail)
-    if c.buzz is None:
-        return f"At M∞ {c.M_inf:.2f} the inlet runs above its design Mach" + tail
-    if c.buzz.zero_range:
-        return (f"At M∞ {c.M_inf:.2f} the shocks meet at the lip: no stable subcritical range, "
-                "so the inlet buzzes as soon as it spills (as Ferri & Nucci found)" + tail)
-    span = c.critical.mfr - c.buzz.mfr
-    return (f"At M∞ {c.M_inf:.2f} the inlet can spill down to A0/Ac {c.buzz.mfr:.3f} (a stable "
-            f"range of {span:.3f}) before buzz" + tail)

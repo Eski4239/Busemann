@@ -54,7 +54,6 @@ _FIELDS = {
                       _display("length", "{:.3f}")(v, s)),
     "diffuser_recovery": ("Diffuser recovery", _num("{:.3f}")),
     "cowl_frontal_height": ("Cowl frontal height", _num("{:.2f} × capture height")),
-    "diffuser_area_ratio": ("Diffuser area ratio", _num("{:.2f}")),
 }
 
 

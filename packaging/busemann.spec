@@ -86,7 +86,8 @@ a = Analysis(                                      # noqa: F821
     datas=datas,
     # matplotlib picks backends by name at run time: mathtext.math_to_image(format="svg")
     # in the equation render process needs backend_svg (found by the frozen self-test)
-    hiddenimports=["busemann.selftest", "matplotlib.backends.backend_svg",
+    hiddenimports=["busemann.selftest", "busemann.screenshots",
+                   "matplotlib.backends.backend_svg",
                    "matplotlib.backends.backend_agg"],
     excludes=EXCLUDES,
     noarchive=False,

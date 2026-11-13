@@ -124,9 +124,9 @@ Busemann 1.0.0 (commit release), 2026-11-13T14:20:58Z
 
 ## Validation summary
 
-How it was checked: every relation in the solver follows NACA Report 1135, and an automated test suite of over 800 tests checks the results against closed-form values. The designs were also compared with 2D CFD simulations in Ansys Fluent (density-based solver, inviscid and k-ω SST viscous runs, with a mesh-refinement check). At the design point the total-pressure recovery agreed within 0.35%, and below the design Mach within 0.1%, with mass capture within 0.4%. With boundary layers included, recovery was about 2% lower, mainly because of a separation bubble at the second ramp corner, which Busemann's separation warning flags. Above the design Mach the CFD showed a Mach reflection at the cowl lip that this model does not include, so recovery there is an upper bound (the CFD was 4.9% lower at Mach 3.25).
+How it was checked: every relation in the solver follows NACA Report 1135, and an automated test suite of over 1,000 tests checks the results against closed-form values. The designs were also compared with 2D CFD simulations in Ansys Fluent (density-based solver, inviscid and k-ω SST viscous runs, with a mesh-refinement check). At the design point the total-pressure recovery agreed within 0.35%, and below the design Mach within 0.1%, with mass capture within 0.4%. With boundary layers included, recovery was about 2% lower, mainly because of a separation bubble at the second ramp corner, which Busemann's separation warning flags. Above the design Mach the CFD showed a Mach reflection at the cowl lip that this model does not include, so recovery there is an upper bound (the CFD was 4.9% lower at Mach 3.25).
 
-Repository: https://github.com/Eski4239/SuperSonic-Inlet-Designer
+Repository: https://github.com/Eski4239/Busemann
 
 ## CFD statement
 

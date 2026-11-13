@@ -84,6 +84,20 @@ def test_changelog_has_a_section_for_this_version():
     assert len(body) > 40
 
 
+def test_development_notes_are_not_release_text():
+    """'## Development notes' follows the release section and is cut from the notes."""
+    t = _tool()
+    text = "## 1.0.0 — first\n\n- feature\n\n## Development notes\n\n- commit abc123\n"
+    assert t.section(text, "1.0.0") == "- feature"
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    body = t.section(changelog, __version__)
+    assert "## Development notes" in changelog
+    assert changelog.index("## Development notes") > changelog.index(f"## {__version__}")
+    assert "Development notes" not in body and "159efb5" not in body
+    dev = changelog[changelog.index("## Development notes"):]
+    assert "159efb5" in dev and "MainWindow" in dev
+
+
 # --- release.yml --------------------------------------------------------------------------------
 def test_workflow_runs_on_version_tags_on_windows_with_python_3_14():
     assert 'tags: ["v*"]' in WORKFLOW

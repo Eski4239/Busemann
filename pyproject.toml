@@ -17,7 +17,7 @@ dependencies = [
 [project.optional-dependencies]
 # PySide6-Essentials only (QtCore, QtGui, QtWidgets, QtSvg): no Addons in the Windows build
 app = ["PySide6-Essentials>=6.10", "pyqtgraph>=0.13"]
-dev = ["pytest", "pytest-qt", "build"]
+dev = ["pytest", "pytest-qt", "build", "pyyaml"]   # pyyaml: the release.yml structure test
 
 [project.scripts]
 inletdesign = "inletdesign.cli:main"

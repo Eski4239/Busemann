@@ -6,7 +6,8 @@
 .DESCRIPTION
   From the repository root (any current folder works):
     1. clean build\venv, build\pyinstaller and the previous dist\ outputs;
-    2. a clean venv in build\venv: pip install ".[app]" pyinstaller (PySide6-Essentials only);
+    2. a clean venv in build\venv: pip install -r packaging\requirements-build.txt (exact
+       versions: PySide6-Essentials only, PyInstaller), then pip install --no-deps .;
     3. pyinstaller packaging\busemann.spec -> dist\Busemann\ (+ LICENSE, THIRD-PARTY-NOTICES.txt);
     4. dist\Busemann\Busemann.exe --self-test --self-test-log <SelfTestLog>: the build fails unless
        the exe exits 0 within the timeout AND the log exists AND contains "self-test: OK";
@@ -116,7 +117,9 @@ New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 Step "Creating build\venv with $Python"
 Invoke-Native $Python @("-m", "venv", $Venv)
 Invoke-Native $VPy @("-m", "pip", "install", "--quiet", "--upgrade", "pip")
-Invoke-Native $VPy @("-m", "pip", "install", "--quiet", ".[app]", "pyinstaller")
+# pinned: the exact versions of the build whose frozen self-test passed
+Invoke-Native $VPy @("-m", "pip", "install", "--quiet", "-r", "packaging\requirements-build.txt")
+Invoke-Native $VPy @("-m", "pip", "install", "--quiet", "--no-deps", ".")
 # (checked in Python: in PowerShell 5.1 a redirected native stderr line is a terminating error)
 Invoke-Native $VPy @("-c", "import importlib.util as u, sys; sys.exit('PySide6-Addons is installed in the build venv (PySide6-Essentials only)' if u.find_spec('PySide6.QtWebEngineCore') or u.find_spec('PySide6.Qt3DCore') else 0)")
 Invoke-Native $VPy @("-c", "import sys, PySide6, PyInstaller; print('Python', sys.version.split()[0], '| PySide6', PySide6.__version__, '| PyInstaller', PyInstaller.__version__)")

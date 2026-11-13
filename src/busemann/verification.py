@@ -38,7 +38,7 @@ VALIDATION_CFD = {
 # How the solver was checked (About, verification_notes.md); user text, no internal names
 VALIDATION_SUMMARY = (
     "How it was checked: every relation in the solver follows NACA Report 1135, and an "
-    "automated test suite of over 800 tests checks the results against closed-form values. "
+    "automated test suite of over 1,000 tests checks the results against closed-form values. "
     "The designs were also compared with 2D CFD simulations in Ansys Fluent (density-based "
     "solver, inviscid and k-ω SST viscous runs, with a mesh-refinement check). At the design "
     "point the total-pressure recovery agreed within 0.35%, and below the design Mach within "
@@ -66,12 +66,6 @@ BUZZ_SEPARATION_SOURCE = (
     "Ferri & Nucci, NACA RM L50K30 (1951), p. 7 and Concluding Remarks pp. 25–26; tests on "
     "conical inlets, M 1.9–2.7. Applying it to a 2D multi-ramp inlet is a Busemann extension.")
 BUZZ_EXTRAPOLATED = " Extrapolated beyond the tested Mach range."
-CHARACTERISTIC_SOURCE = (
-    "NACA Report 1135 eqs. (44), (80), (99); Moeckel, NACA TN 1921 (1949), eqs. (4), "
-    "(6)/(6a), (14), (17), (30)–(36), pp. 7–19, applied to the flow behind the last ramp shock "
-    "(Busemann extension); Ferri & Nucci, NACA RM L50K30 (1951), Summary p. 1, p. 7 and "
-    "Concluding Remarks p. 25 (conical inlets, M 1.9–2.7; 2D multi-ramp application is a "
-    "Busemann extension)")
 KORKEGI_TOOLTIP = (f"{_sep.KORKEGI_CRITERION}. Source: {_sep.KORKEGI_SOURCE}. "
                    f"Korkegi: {_sep.KORKEGI_SCOPE}.")
 
@@ -194,18 +188,8 @@ def items(design, inputs, fs=None, off=None, off_fs=None):
         DRAG_SOURCE,
         _cfd("It excludes skin friction, subcritical spillage (terminal shock expelled), the "
              "cowl beyond its frontal height and 3D effects")))
-    # M9c: the characteristic and the buzz onset are approximate (Analytics)
-    if design.inputs.n_ramps:
-        out.append(VerificationItem(
-            "info", "buzz", "Inlet characteristic and buzz onset are approximate",
-            "Supercritical branch quasi-1D (diffuser exit/entry area ratio "
-            f"{getattr(inputs, 'diffuser_area_ratio', 2.0):.2f}); expelled-shock position by "
-            "Moeckel's method in the flow behind the last ramp shock; buzz onset when the "
-            "vortex sheet from the shock intersection enters the cowl",
-            CHARACTERISTIC_SOURCE,
-            _cfd("The ideal subcritical branch is flat and ignores viscous losses; the buzz "
-                 "onset is an estimate")))
-    # M9c: ramp separation shortens the stable subcritical range (Ferri & Nucci)
+    # M9c: ramp separation shortens the stable subcritical range (Ferri & Nucci); the inlet
+    # characteristic view itself was removed before 1.0, this warning stays
     flagged = [c.shock for c in design.separation if c.shock.startswith("ramp") and c.flagged]
     if flagged:
         M_ref = off.M_inf if off is not None else design.inputs.M

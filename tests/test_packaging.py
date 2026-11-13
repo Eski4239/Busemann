@@ -63,6 +63,23 @@ def test_installer_settings():
     assert "#error AppVersion is not defined" in ISS
 
 
+REPO_URL = "https://github.com/Eski4239/Busemann"     # renamed from SuperSonic-Inlet-Designer
+
+
+def test_links_use_the_current_repository_name():
+    assert _iss_setting("AppPublisherURL") == REPO_URL
+    assert _iss_setting("AppSupportURL") == f"{REPO_URL}/issues"
+    assert _iss_setting("AppUpdatesURL") == f"{REPO_URL}/releases"
+    validation = json.loads((ROOT / "src/busemann/resources/data/validation.json")
+                            .read_text(encoding="utf-8"))
+    assert validation["repository"] == REPO_URL
+    old = "SuperSonic-" + "Inlet-Designer"
+    for path in [ROOT / "README.md", ROOT / "CHANGELOG.md", ROOT / "packaging" / "busemann.iss",
+                 *(ROOT / "src" / "busemann" / "resources").rglob("*.json"),
+                 *(ROOT / "docs" / "samples").glob("*.md")]:
+        assert old not in path.read_text(encoding="utf-8"), path.name
+
+
 def test_installer_takes_no_file_associations():
     assert _iss_setting("ChangesAssociations") == "no"
     assert "[Registry]" not in ISS
@@ -180,8 +197,38 @@ def test_build_script_self_test_rules():
 def test_build_script_outputs():
     for piece in ("Busemann-Setup-$Version.exe", "Busemann-$Version-portable.zip",
                   "SHA256SUMS.txt", "THIRD-PARTY-NOTICES.txt", '"/DAppVersion=$Version"',
-                  r'build\venv', '".[app]", "pyinstaller"', "PySide6-Addons"):
+                  r'build\venv', "PySide6-Addons"):
         assert piece in PS1, piece
+
+
+# --- pinned build environment (M12, after PART 5) ------------------------------------------------
+REQ = ROOT / "packaging" / "requirements-build.txt"
+
+
+def _pins():
+    lines = [ln.strip() for ln in REQ.read_text(encoding="utf-8").splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
+def test_build_requirements_pin_every_package_exactly():
+    pins = _pins()
+    assert pins
+    for line in pins:
+        assert re.fullmatch(r"[A-Za-z0-9_.\-]+==[A-Za-z0-9_.+\-]+", line), line
+    names = [ln.split("==")[0].lower().replace("_", "-") for ln in pins]
+    assert len(names) == len(set(names))                                 # no duplicates
+    for required in ("pyside6-essentials", "numpy", "scipy", "matplotlib", "pyqtgraph",
+                     "ezdxf", "pyinstaller"):
+        assert required in names, required
+    assert "pyside6" not in names and "pyside6-addons" not in names      # Essentials only
+    assert "supersonic-inlet-designer" not in names                       # installed --no-deps
+
+
+def test_build_installs_the_pins_then_the_app_without_dependencies():
+    pinned = PS1.index('"-r", "packaging\\requirements-build.txt"')
+    app = PS1.index('"--no-deps", "."')
+    assert pinned < app
+    assert '".[app]"' not in PS1                                        # no unpinned resolve
 
 
 def test_build_and_dist_are_ignored():
