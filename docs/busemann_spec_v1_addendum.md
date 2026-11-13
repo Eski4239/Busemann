@@ -10,8 +10,9 @@ menus or windows, never extra rows on existing panels unless listed here.
 
 ## A. Information architecture
 
-- **Welcome window** (modal, before the main window; M8.2): a 3D render of a generic
-  two-ramp inlet on the left; "New design" (Validation case, Blank), "Examples" (the
+- **Welcome window** (modal, before the main window; M8.2, brand header in M12): the logo
+  lockup, the version and the welcome image (a Concorde-style intake at Mach 2.02, temperature
+  field computed with Busemann) on the left; "New design" (Validation case, Blank), "Examples" (the
   Concorde cruise, XB-70, SR-71 and X-15 record presets plus the bundled example designs,
   one list), "Recent" (8) with Open…, and a "Show tour" checkbox (checked on first launch
   only). No "Show at startup" option. Closing it opens the main window with the default
@@ -314,7 +315,7 @@ The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
 5. **Exports trimmed:** IGES, wall-point CSV and the figure exports (canvas and
    off-design charts, PNG/SVG/PDF) are removed. matplotlib stays a dependency: the
    Explain equations are rendered with its mathtext (and the core CLI plot and
-   `tools/render_inlet_3d.py` use it).
+   `tools/brand/render_welcome_hero.py` use it).
 6. **Canvas dimension labels** use real subscripts (h<sub>c</sub>, h<sub>t</sub>,
    L<sub>1</sub>, θ<sub>1</sub>, rich text), and so do the hover / selection read-out
    labels (M<sub>n1</sub>, p<sub>2</sub>/p<sub>1</sub>). A test scans them for "_".

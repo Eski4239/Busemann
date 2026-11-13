@@ -177,16 +177,6 @@ def test_skip_stores_done_and_help_reopens(qtbot, window):
 # --- M8 restyle ------------------------------------------------------------------------------
 
 @pytest.mark.ui
-def test_header_shows_the_3d_render(welcome):
-    from busemann.paths import resource_path
-
-    assert resource_path("images", "inlet_3d.png").is_file()
-    assert not welcome.pixmap.isNull() and welcome.pixmap.width() > 400
-    shown = welcome.image.pixmap()
-    assert shown is not None and not shown.isNull()
-
-
-@pytest.mark.ui
 def test_cards_are_title_plus_mono_subtitle_and_focusable(qtbot, welcome):
     from busemann.theme import qt as theme
 

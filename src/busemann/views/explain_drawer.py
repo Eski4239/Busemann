@@ -41,6 +41,9 @@ class ExplainPopup(QDialog):
         super().__init__(parent)
         self.setObjectName("explainPopup")
         self.setWindowTitle("Explain")
+        from ..theme.qt import app_icon
+
+        self.setWindowIcon(app_icon())
         self.setModal(False)
         # a movable tool window: stays above the main window, has its own title bar
         self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.WindowTitleHint

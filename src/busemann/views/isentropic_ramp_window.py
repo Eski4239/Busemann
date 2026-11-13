@@ -225,6 +225,7 @@ class IsentropicRampWindow(QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Isentropic ramp")
+        self.setWindowIcon(theme.app_icon())
         self.setMinimumSize(900, 600)
         self.main_window = main_window
         self._ramp = None

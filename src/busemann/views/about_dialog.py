@@ -16,9 +16,10 @@ from PySide6.QtWidgets import (
 from .. import __version__
 from .. import verification as V
 from ..paths import resource_path
+from ..theme import qt as theme
 from ..theme import tokens
 
-
+LOGO, LOGO_FALLBACK, LOGO_H = "logo_lockup", "logo_lockup_2x.png", 40
 
 def components():
     return json.loads(resource_path("licenses", "components.json").read_text(encoding="utf-8"))[
@@ -68,6 +69,7 @@ class AboutDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("aboutDialog")
         self.setWindowTitle("About Busemann")
+        self.setWindowIcon(theme.app_icon())
         self.resize(680, 620)
         body = QWidget()
         v = QVBoxLayout(body)
@@ -102,8 +104,15 @@ class AboutDialog(QDialog):
 
     def _about_section(self):
         items = "".join(f"<li>{html.escape(a)}</li>" for a in ABOUT_ASSUMPTIONS)
+        self.logo = QLabel()
+        self.logo.setObjectName("aboutLogo")
+        self.logo.setAccessibleName("Busemann — supersonic inlet design lab")
+        self.logo.setPixmap(theme.svg_pixmap(
+            LOGO, LOGO_H, max(self.devicePixelRatioF() or 1.0, 2.0), fallback=LOGO_FALLBACK))
+        self.version_label = QLabel(f"Version {__version__}")
+        self.version_label.setObjectName("aboutVersion")
+        self.version_label.setFont(theme.mono_font(tokens.SIZE_LABEL))
         text = QLabel(
-            f"<h2 style='margin-bottom:2px'>Busemann {html.escape(__version__)}</h2>"
             f"<p>{html.escape(ABOUT_TEXT)}</p>"
             f"<p><b>Who made it and why</b></p><p>{html.escape(MAKER_TEXT)}</p>"
             f"<p><b>What it assumes</b></p><ul>{items}</ul>")
@@ -112,7 +121,15 @@ class AboutDialog(QDialog):
         text.setAlignment(Qt.AlignmentFlag.AlignTop)
         text.setToolTip("What Busemann does and what it assumes.")
         self.about_label = text
-        return text
+        section = QWidget()
+        v = QVBoxLayout(section)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        v.addWidget(self.logo)
+        v.addWidget(self.version_label)
+        v.addSpacing(tokens.space(1))
+        v.addWidget(text)
+        return section
 
     def _validation_tab(self):
         info = QLabel(VALIDATION_TEXT)

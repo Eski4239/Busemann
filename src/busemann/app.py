@@ -60,7 +60,7 @@ class MainWindow(QMainWindow):
         # running, e.g. one pytest session creating hundreds of MainWindows).
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.setWindowTitle("Busemann")
-        self.setWindowIcon(theme.icon("busemann", "accent", 64))
+        self.setWindowIcon(theme.app_icon())
         self.setMinimumSize(*tokens.MIN_WINDOW)
 
         self.flight_panel = FlightPanel(self.state)
@@ -543,6 +543,7 @@ def setup_application(app):
     app.setApplicationName("Busemann")
     app.setApplicationVersion(__version__)
     theme.apply(app)
+    app.setWindowIcon(theme.app_icon())      # inherited by every dialog and message box
     from .gc_guard import install as install_gc_guard
 
     install_gc_guard(app)          # cyclic GC on the GUI thread only (worker-thread crash)
@@ -551,6 +552,22 @@ def setup_application(app):
         app.aboutToQuit.connect(_warm.shutdown)
         _warm_shutdown_connected = True
     return app
+
+
+APP_USER_MODEL_ID = "PabloGouletValenti.Busemann"
+
+
+def set_windows_app_id():
+    """Own taskbar group and icon on Windows when run from source (python.exe would otherwise
+    show the Python icon). No-op elsewhere."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except (AttributeError, OSError):
+        pass
 
 
 def setup_high_dpi():
@@ -568,6 +585,7 @@ def main(argv=None):
     from .explain.mathsvg import prune_cache
 
     prune_cache()                             # equation cache: drop old files, cap the size
+    set_windows_app_id()
     setup_high_dpi()
     args = sys.argv[1:] if argv is None else list(argv)
     app = QApplication.instance() or QApplication(["busemann", *args])

@@ -1,7 +1,7 @@
 """Welcome window (addendum A/B1; M8.2 layout): modal, before the main window.
 
-Left header: "Busemann", tagline, version and a 3D render of a generic two-ramp inlet
-(resources/images/inlet_3d.png, made offline by tools/render_inlet_3d.py). Right:
+Left header: the brand lockup (logo, title, tagline), the version and the welcome image
+(resources/brand/welcome_hero.png, made offline by tools/brand). Right:
 - "New design": the validation case and a blank design;
 - "Examples": the flight presets (Concorde cruise, XB-70, SR-71, X-15 record) and the bundled
   example designs, one list;
@@ -14,10 +14,10 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFileDialog, QFrame, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
-    QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 from inletdesign.presets import get as get_preset
@@ -40,7 +40,10 @@ EXAMPLE_PRESETS = ("Concorde cruise", "XB-70", "SR-71", "X-15 record")
 EXAMPLES = (("m3_cowl_constrained", "Cowl-constrained M3", "M 3.00 · 3 ramps · max cowl 30°"),)
 MAX_RECENT = 8
 RECENT_EMPTY = "No recent designs yet. Open a DXF or start from a new design."
-IMAGE = ("images", "inlet_3d.png")
+LOGO, LOGO_FALLBACK, LOGO_H = "logo_lockup", "logo_lockup_2x.png", 34   # brand lockup
+HERO = "welcome_hero.png"                  # 1040 x 660, made by tools/brand
+HERO_SIZE, HERO_DPR, HERO_RADIUS = (260, 165), 2.0, 6
+HERO_CAPTION = "Concorde-style intake at Mach 2.02 — temperature field computed with Busemann"
 HEADER_W = 320
 
 
@@ -119,6 +122,7 @@ class WelcomeDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("welcomeDialog")
         self.setWindowTitle("Busemann")
+        self.setWindowIcon(theme.app_icon())
         self.setModal(True)
         self.resize(980, 600)
         self.setAcceptDrops(True)
@@ -170,39 +174,34 @@ class WelcomeDialog(QDialog):
         head.setContentsMargins(tokens.space(3), tokens.space(4), tokens.space(3),
                                 tokens.space(2))
         head.setSpacing(4)
-        title = QLabel("Busemann")
-        title.setObjectName("welcomeTitle")
-        title.setFont(theme.ui_font(tokens.SIZE_KPI, QFont.Weight.DemiBold))
-        title.setToolTip(tip("welcome.title"))
-        tagline = QLabel("Supersonic inlet design lab")
-        tagline.setObjectName("welcomeTagline")
-        tagline.setToolTip(tip("welcome.title"))
+        dpr = max(self.devicePixelRatioF() or 1.0, HERO_DPR)
+        self.logo = QLabel()
+        self.logo.setObjectName("welcomeLogo")
+        self.logo.setAccessibleName("Busemann — supersonic inlet design lab")
+        self.logo.setToolTip(tip("welcome.title"))
+        self.logo.setPixmap(theme.svg_pixmap(LOGO, LOGO_H, dpr, fallback=LOGO_FALLBACK))
         version = QLabel(f"Version {__version__}")
         version.setObjectName("welcomeVersion")
         version.setFont(theme.mono_font(tokens.SIZE_LABEL))
         version.setToolTip(tip("welcome.version"))
         self.image = QLabel()
-        self.image.setObjectName("inletImage")
+        self.image.setObjectName("heroImage")
         self.image.setToolTip(tip("welcome.thumbnail"))
-        self.pixmap = QPixmap(str(resource_path(*IMAGE)))
-        width = HEADER_W - 2 * tokens.space(3)
-        if not self.pixmap.isNull():
-            dpr = self.devicePixelRatioF() or 1.0
-            scaled = self.pixmap.scaledToWidth(round(width * dpr),
-                                               Qt.TransformationMode.SmoothTransformation)
-            scaled.setDevicePixelRatio(dpr)
-            self.image.setPixmap(scaled)
-        self.image.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        caption = QLabel("A generic two-ramp inlet: the validation geometry, extruded")
-        caption.setObjectName("muted")
+        self.pixmap = theme.rounded_pixmap(HERO, *HERO_SIZE, HERO_RADIUS, dpr)
+        self.image.setPixmap(self.pixmap)
+        self.image.setFixedSize(*HERO_SIZE)
+        caption = QLabel(HERO_CAPTION)
+        caption.setObjectName("heroCaption")
         caption.setWordWrap(True)
+        caption.setFixedWidth(HERO_SIZE[0])
         caption.setToolTip(tip("welcome.thumbnail"))
+        self.caption = caption
         hint = QLabel("Esc opens the default design. You can also drop a DXF here.")
         hint.setObjectName("muted")
         hint.setWordWrap(True)
         hint.setToolTip(tip("welcome.hint"))
-        for w in (title, tagline, version):
-            head.addWidget(w)
+        head.addWidget(self.logo)
+        head.addWidget(version)
         head.addSpacing(tokens.space(4))
         head.addWidget(self.image)
         head.addWidget(caption)
