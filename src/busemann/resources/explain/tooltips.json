@@ -162,7 +162,7 @@
   "verification.summary": "Number of verification items; the tab badge counts the warnings and errors.",
   "verification.title": "What is approximate or flagged, and how severe it is.",
   "verification.criterion": "The criterion or check used, with the current values.",
-  "verification.source": "Where the criterion comes from (sources marked pending are not yet confirmed).",
+  "verification.source": "Where the criterion comes from.",
   "verification.text": "What the item means for the design; every item must be verified with a CFD solver.",
   "verification.quote": "Validation evidence from the project's own CFD that applies to this design.",
   "right.tabs": "Results of the current design, or the Verification list of approximations and warnings.",

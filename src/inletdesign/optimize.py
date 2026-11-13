@@ -6,6 +6,18 @@ Two independent methods are provided so they can cross-check each other:
   1-D search over Mn. This is the primary, fast method.
 - optimize_numerical: brute-force n-dimensional Nelder-Mead search over the
   ramp angles directly, used only as a correctness check on the method above.
+
+# SOURCE (confirmed): K. Oswatitsch, "Pressure Recovery for Missiles with Reaction Propulsion
+#   at High Supersonic Speeds (The Efficiency of Shock Diffusers)", NACA TM 1140 (1947),
+#   translation of Forschungen und Entwicklungen des Heereswaffenamtes, Bericht Nr. 1005,
+#   Goettingen, January 1944. Equal-strength condition: eq. (17), p. 13
+#   (Ma0 sin g0 = Ma1 sin g1 = ...; "the total-pressure ratios as well as the pressure ratios
+#   themselves for all oblique compression shocks are equal"); problem statement p. 6.
+#   Notation: TM 1140 writes gamma for the shock angle (our beta) and k for the ratio of
+#   specific heats (our gamma); its n counts the terminal normal shock (n shocks = n - 1 ramps).
+# Consistency check (documented, not a test: the reference values are read off a printed
+#   graph): the maximum recovery at M 3 for 1-4 shocks computed here, 0.328 / 0.581 / 0.744 /
+#   0.836 (0, 1, 2, 3 ramps + the normal shock), agrees with TM 1140 Fig. 1, p. 43.
 """
 import math
 

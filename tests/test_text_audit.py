@@ -180,6 +180,42 @@ def test_no_user_facing_string_names_a_validation_phase():
     assert any("the validation CFD" in t for _, t in _phase_texts())    # rephrased, not lost
 
 
+# --- M12: every source is in its final state; "pending" never reaches the user -------------
+PENDING = re.compile(r"\bpending\b", re.I)
+
+
+def _user_texts():
+    """The validation-phase corpus plus the About texts, the separation source constants and
+    the rendered Explain sources."""
+    from inletdesign import separation as S
+
+    out = list(_phase_texts())
+    out += [("Korkegi source", S.KORKEGI_SOURCE), ("normal-shock source", S.NORMAL_SOURCE)]
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location(
+        "explain_cases", Path(__file__).with_name("test_explain_content.py"))
+    cases = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cases)
+    for label, item, name, _ctx, rendered in cases._render_all():
+        out += [(f"{label}/{item}/{name} source", ln.source)
+                for lines in rendered.sections.values() for ln in lines if ln.source]
+    try:
+        from busemann.views import about_dialog as A
+    except ImportError:                          # no Qt: the core texts are still checked
+        return out
+    out += [("About", t) for t in (A.ABOUT_TEXT, A.MAKER_TEXT, A.VALIDATION_TEXT,
+                                     *A.ABOUT_ASSUMPTIONS)]
+    return out
+
+
+def test_no_user_facing_string_says_pending():
+    hits = sorted({f"{where}: {text[:120]!r}" for where, text in _user_texts()
+                   if PENDING.search(text)})
+    assert hits == []
+
+
 # --- M8.4: canvas dimension labels and hover / selection rows use real subscripts ---------
 CASES = ((3.0, 1), (3.0, 2), (3.0, 3), (6.7, 4))
 

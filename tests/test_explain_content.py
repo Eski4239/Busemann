@@ -62,10 +62,12 @@ def test_every_entry_parses_with_sourced_relations():
             assert (source.startswith(("NACA Report 1135", "Oswatitsch", "Korkegi",
                                        "Seddon"))
                     or source.startswith("definition used by this tool")), (name, source)
-            if source.startswith(("Oswatitsch", "Korkegi", "Seddon")):
-                assert "pending user confirmation" in source          # not yet confirmed
-            if source.startswith("NACA Report 1135"):
-                assert "pending" not in source, (name, source)      # all confirmed (M6)
+            assert "pending" not in source.lower(), (name, source)  # final state (M12)
+            if source.startswith("Oswatitsch"):                     # confirmed (M12)
+                assert "NACA TM 1140" in source and "eq. (17), p. 13" in source
+                assert "Bericht Nr. 1005" in source
+            if source.startswith(("Korkegi", "Seddon")):          # originals not obtained
+                assert "(original not consulted; widely cited correlation)" in source
         text = C.entry_text(name)
         assert "Connection with normal shock" not in text           # no such NACA heading
         assert r"^\circ" not in text                               # use \degree (no gap)

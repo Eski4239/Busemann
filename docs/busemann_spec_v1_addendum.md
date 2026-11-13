@@ -57,7 +57,7 @@ menus or windows, never extra rows on existing panels unless listed here.
    η_MIL = 800 / (M∞⁴ + 935) for M∞ > 5. Input "Subsonic diffuser recovery"
    (Advanced, default 0.97, labelled estimate). KPI shows inviscid recovery and the
    engine-face estimate (× diffuser) against η_MIL. Line on the off-design recovery
-   chart. SOURCE required (pending until confirmed).
+   chart. SOURCE confirmed (NASA Glenn "Inlet Performance", see verification.MIL_SOURCE).
 3. **Gap to optimum (custom angles).** "Recovery X % below the Oswatitsch optimum for
    N ramps" plus ∂η/∂θ_k per ramp in the ramp table.
 4. **Canvas interaction.** In custom mode ramp corners are draggable; while dragging,
@@ -318,3 +318,22 @@ The `.busemann` JSON format is removed (menu items, drag-and-drop and examples).
 6. **Canvas dimension labels** use real subscripts (h<sub>c</sub>, h<sub>t</sub>,
    L<sub>1</sub>, θ<sub>1</sub>, rich text), and so do the hover / selection read-out
    labels (M<sub>n1</sub>, p<sub>2</sub>/p<sub>1</sub>). A test scans them for "_".
+
+## L. M12 — sources at release
+
+- **Oswatitsch (confirmed; the reviewer checked the scan in `references/`).** K. Oswatitsch,
+  "Pressure Recovery for Missiles with Reaction Propulsion at High Supersonic Speeds (The
+  Efficiency of Shock Diffusers)", NACA TM 1140 (1947), translation of Forschungen und
+  Entwicklungen des Heereswaffenamtes, Bericht Nr. 1005, Göttingen, January 1944.
+  Equal-strength condition: eq. (17), p. 13 (Ma₀ sin γ₀ = Ma₁ sin γ₁ = … ; "the total-pressure
+  ratios as well as the pressure ratios themselves for all oblique compression shocks are
+  equal"); problem statement p. 6. Notation: TM 1140 writes γ for the shock angle (our β) and
+  k for the ratio of specific heats (our γ); its n counts the terminal normal shock.
+- **Consistency check (documented, not a test).** Busemann's maximum recovery at M 3 for
+  1–4 shocks, 0.328 / 0.581 / 0.744 / 0.836 (0–3 ramps plus the normal shock), agrees with
+  TM 1140 Fig. 1, p. 43, read off the printed graph. Recorded in `inletdesign/optimize.py`.
+- **Korkegi** (AIAA J. 13(4), 1975) and **Seddon & Goldsmith** (Intake Aerodynamics, 2nd ed.,
+  1999): the originals could not be obtained. Both are cited as "(original not consulted;
+  widely cited correlation)"; the criteria, their "approximate — verify with CFD" wording and
+  the validation-CFD agreement note are unchanged. A test fails on any user-facing string
+  containing "pending".

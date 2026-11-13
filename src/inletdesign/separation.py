@@ -4,9 +4,10 @@ Empirical criteria only: they flag where an inviscid design is likely to separat
 not predict separation. Every result must be verified with a CFD solver (viscous, turbulent).
 Scalars and NumPy arrays are both accepted by the threshold functions.
 
-Criteria (each SOURCE pending user confirmation):
+Criteria (the originals could not be obtained: both are cited as widely used correlations,
+original not consulted):
 
-# SOURCE (pending user confirmation): R. H. Korkegi, "Comparison of Shock-Induced Two- and
+# SOURCE (original not consulted; widely cited correlation): R. H. Korkegi, "Comparison of Shock-Induced Two- and
 #   Three-Dimensional Incipient Turbulent Separation", AIAA Journal, Vol. 13, No. 4,
 #   April 1975, pp. 534-535. Two-dimensional (compression corner / incident shock)
 #   correlation for a turbulent boundary layer at the incipient-separation pressure ratio:
@@ -15,7 +16,7 @@ Criteria (each SOURCE pending user confirmation):
 #   M1 > 4.5 returns "outside the criterion's range" instead of a verdict. A correlation for
 #   fully turbulent, adiabatic-wall, high-Reynolds-number flow. Applied to ramp shocks k >= 2
 #   only: ramp shock 1 starts at the sharp leading edge, with no upstream boundary layer.
-# SOURCE (pending user confirmation): normal shock on a turbulent boundary layer separates
+# SOURCE (original not consulted; widely cited correlation): normal shock on a turbulent boundary layer separates
 #   incipiently for an upstream Mach number of about 1.3 (classic intake value), e.g.
 #   J. Seddon, E. L. Goldsmith, "Intake Aerodynamics", 2nd ed., Blackwell Science, Oxford,
 #   1999, chapter on shock / boundary-layer interaction (chapter and page to be confirmed).
@@ -28,11 +29,11 @@ KORKEGI_2D_MAX_MACH = 4.5
 NORMAL_SHOCK_INCIPIENT_MACH = 1.3
 
 KORKEGI_CRITERION = "p₂/p₁ ≥ 1 + 0.3 M₁² (2D, turbulent, M₁ ≤ 4.5)"
-KORKEGI_SOURCE = ("Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 "
-                  "(pending user confirmation)")
+NOT_CONSULTED = "(original not consulted; widely cited correlation)"
+KORKEGI_SOURCE = f"Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 {NOT_CONSULTED}"
 NORMAL_CRITERION = "M₁ ≥ 1.3 ahead of a normal shock (turbulent)"
 NORMAL_SOURCE = ("Seddon, J. & Goldsmith, E. L., Intake Aerodynamics, 2nd ed., Blackwell, "
-                 "1999 (pending user confirmation)")
+                 f"1999 {NOT_CONSULTED}")
 KORKEGI_SCOPE = "correlation for fully turbulent, adiabatic-wall, high-Reynolds-number flow"
 WORDING = "approximate — verify with CFD"
 

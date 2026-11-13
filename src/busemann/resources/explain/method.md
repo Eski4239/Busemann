@@ -1,7 +1,7 @@
 # Design method: Oswatitsch equal strength
 
 ## Relations
-<!-- SOURCE: Oswatitsch, K.: Pressure Recovery for Missiles with Reaction Propulsion at High Supersonic Speeds (The Efficiency of Shock Diffusers). NACA TM 1140, 1947 (translation of the 1944 report). Not in NACA 1135 or Anderson (pending user confirmation) -->
+<!-- SOURCE: Oswatitsch, K., "Pressure Recovery for Missiles with Reaction Propulsion at High Supersonic Speeds (The Efficiency of Shock Diffusers)", NACA TM 1140 (1947), translation of Forschungen und Entwicklungen des Heereswaffenamtes, Bericht Nr. 1005, Göttingen, January 1944; equal-strength condition eq. (17), p. 13 (problem statement p. 6). TM 1140 writes γ for the shock angle (β here) and k for the ratio of specific heats (γ here); its n counts the terminal normal shock -->
 $$ M_1 \sin\beta_1 = M_2 \sin\beta_2 = \cdots = M_n \sin\beta_n = M_n^\ast $$
 <!-- SOURCE: definition used by this tool: total pressure is unchanged between shocks, so the recovery is the product of the shock ratios -->
 $$ \eta = \left[\prod_{i=1}^{n} \left(\frac{p_{02}}{p_{01}}\right)_i\right] \left(\frac{p_{02}}{p_{01}}\right)_\mathrm{normal} $$

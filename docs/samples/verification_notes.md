@@ -1,7 +1,7 @@
 # Busemann verification notes
 
 Written with: geometry DXF  
-Busemann 0.1.0 (commit 6047750), 2026-11-03T23:43:41Z
+Busemann 0.1.0 (commit 07f2235), 2026-11-13T13:24:35Z
 
 ## Inputs
 
@@ -27,6 +27,8 @@ Busemann 0.1.0 (commit 6047750), 2026-11-03T23:43:41Z
 | mdot_kgps | — |
 | inlet_width_m | — |
 | diffuser_recovery | 0.97 |
+| cowl_frontal_height | 0.1 |
+| diffuser_area_ratio | 2 |
 
 ## Model assumptions
 
@@ -38,23 +40,23 @@ Busemann 0.1.0 (commit 6047750), 2026-11-03T23:43:41Z
 
 ## Verification items
 
-8 items: 0 errors, 3 warnings, 5 notes. Each one must be verified with a CFD solver.
+11 items: 0 errors, 4 warnings, 7 notes. Each one must be verified with a CFD solver.
 
 ### 1. Ramp shock 2: separation likely (approximate)
 
 - Severity: Warning
 - Criterion: p₂/p₁ ≥ 1 + 0.3 M₁² (2D, turbulent, M₁ ≤ 4.5); p₂/p₁ 2.818 vs incipient 2.527 (M₁ 2.256)
-- Source: Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 (pending user confirmation)
+- Source: Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 (original not consulted; widely cited correlation)
 - Ramp shock 2 at the design point: separation likely, +11.5 % from the threshold (approximate — verify with CFD); must be verified with a CFD solver.
-- Validation evidence: Phase 3b viscous CFD at this geometry: a corner separation bubble at the second ramp corner, x = 109.5–125.0 mm, 15.5 mm long (0.155 h_c), peak reverse wall shear −81.7 Pa. (docs/validation_3b.md)
+- Validation evidence: The validation CFD (viscous) at this geometry: a corner separation bubble at the second ramp corner, x = 109.5–125.0 mm, 15.5 mm long (0.155 of the capture height), peak reverse wall shear −81.7 Pa.
 
 ### 2. Terminal normal shock: separation likely (approximate)
 
 - Severity: Warning
 - Criterion: M₁ ≥ 1.3 ahead of a normal shock (turbulent); M₁ 1.507 vs 1.3
-- Source: Seddon, J. & Goldsmith, E. L., Intake Aerodynamics, 2nd ed., Blackwell, 1999 (pending user confirmation)
+- Source: Seddon, J. & Goldsmith, E. L., Intake Aerodynamics, 2nd ed., Blackwell, 1999 (original not consulted; widely cited correlation)
 - Terminal normal shock at the design point: separation likely, +15.9 % from the threshold (approximate — verify with CFD); must be verified with a CFD solver.
-- Validation evidence: Phase 3b: the terminal shock was not simulated; a Mach 1.5 normal shock on the turbulent duct boundary layer is likely to cause further separation losses. (docs/validation_3b.md)
+- Validation evidence: The validation CFD did not simulate the terminal shock; a Mach 1.5 normal shock on the turbulent duct boundary layer is likely to cause further separation losses.
 
 ### 3. Cowl lip shock attachment margin
 
@@ -63,52 +65,68 @@ Busemann 0.1.0 (commit 6047750), 2026-11-03T23:43:41Z
 - Source: Oblique-shock θ–β–M relation, attached-shock limit (NACA Report 1135)
 - Zero-thickness or wedge lip idealisation; the external cowl flow, its drag and any bow shock are not modelled; must be verified with a CFD solver.
 
-### 4. Ramp shock 1: not applicable — no upstream boundary layer
+### 4. Ramp separation reduces the buzz margin (approximate)
+
+- Severity: Warning
+- Criterion: Separation check flags ramp shock 2 (approximate, see the separation items)
+- Source: Ferri & Nucci, NACA RM L50K30 (1951), p. 7 and Concluding Remarks pp. 25–26; tests on conical inlets, M 1.9–2.7. Applying it to a 2D multi-ramp inlet is a Busemann extension. Extrapolated beyond the tested Mach range.
+- The separation check flags a ramp shock for this design. In tests of external-compression inlets, separation on the compression surface allowed stable subcritical operation only for very small reductions in mass flow, so this inlet is likely to buzz soon after it starts spilling flow. Verify with CFD or wind-tunnel data.
+
+### 5. Ramp shock 1: not applicable — no upstream boundary layer
 
 - Severity: Note
 - Criterion: Shock / boundary-layer criterion not applied: the shock starts at the sharp leading edge
 - Source: — (no criterion applied)
 - Ramp shock 1 at the design point: not applicable — no upstream boundary layer (approximate — verify with CFD). It starts at the sharp leading edge, where no boundary layer has grown, so the shock / boundary-layer criterion does not apply; must be verified with a CFD solver.
-- Validation evidence: Phase 3b viscous CFD at this geometry: no separation on the first ramp. (docs/validation_3b.md)
+- Validation evidence: The validation CFD (viscous) at this geometry: no separation on the first ramp.
 
-### 5. Real-gas effects
+### 6. Real-gas effects
 
 - Severity: Note
 - Criterion: T0 616 K vs 800 K (constant γ above it is optimistic)
 - Source: Busemann model limit (engineering threshold, no published criterion cited)
 - Calorically perfect gas with constant γ; vibrational excitation and dissociation are not modelled; must be verified with a CFD solver.
 
-### 6. Recovery above the design Mach is an upper bound
+### 7. Recovery above the design Mach is an upper bound
 
 - Severity: Note
 - Criterion: Shock-in-duct regime (M∞ > design): cowl shock and duct reflections not modelled
-- Source: Phase 3d CFD at M∞ 3.25: Mach reflection at the lip, recovery 4.9 % below the tool (docs/validation_3d.md)
+- Source: The validation CFD at M∞ 3.25: Mach reflection at the lip, recovery 4.9 % below the tool
 - Above the design Mach the off-design recovery is an upper bound; must be verified with a CFD solver.
 
-### 7. MIL-E-5008B comparison basis
+### 8. MIL-E-5008B comparison basis
 
 - Severity: Note
 - Criterion: η_MIL = 1 − 0.075 (M∞ − 1)^1.35 (1 < M∞ ≤ 5), 800 / (M∞⁴ + 935) (M∞ > 5), compared with the engine-face estimate (inviscid recovery × diffuser), not the inviscid value
 - Source: MIL-E-5008B (1959), as given by NASA Glenn Research Center, 'Inlet Performance', https://www.grc.nasa.gov/WWW/BGH/inleth.html (formula confirmed)
 - The specification line is a reference, not a model result; must be verified with a CFD solver.
 
-### 8. Subsonic diffuser recovery is an estimate
+### 9. Subsonic diffuser recovery is an estimate
 
 - Severity: Note
 - Criterion: Entered value 0.970 (default 0.97); Busemann does not compute the subsonic diffuser
 - Source: User input (estimate)
 - The engine-face recovery depends on this estimate; must be verified with a CFD solver.
 
+### 10. Drag is an inviscid pressure-drag estimate
+
+- Severity: Note
+- Criterion: Additive drag: (p − p∞) along the dividing streamline from the free stream to the lip; cowl drag: the oblique-shock pressure on the cowl's outer face over a frontal height of 0.10 × capture height; coefficients on q∞ × capture height
+- Source: Additive drag: M. Sibulkin, 'Theoretical and Experimental Investigation of Additive Drag', NACA Report 1187 (1954), eq. (5)/(5a), p. 2 (change in total momentum of the entering stream tube; p. 3, the equivalent pressure integral); the report treats axisymmetric inlets, applied here per unit width in 2D. Cowl pressure drag: Busemann model choice (oblique-shock relations, NACA Report 1135)
+- It excludes skin friction, subcritical spillage (terminal shock expelled), the cowl beyond its frontal height and 3D effects; must be verified with a CFD solver.
+
+### 11. Inlet characteristic and buzz onset are approximate
+
+- Severity: Note
+- Criterion: Supercritical branch quasi-1D (diffuser exit/entry area ratio 2.00); expelled-shock position by Moeckel's method in the flow behind the last ramp shock; buzz onset when the vortex sheet from the shock intersection enters the cowl
+- Source: NACA Report 1135 eqs. (44), (80), (99); Moeckel, NACA TN 1921 (1949), eqs. (4), (6)/(6a), (14), (17), (30)–(36), pp. 7–19, applied to the flow behind the last ramp shock (Busemann extension); Ferri & Nucci, NACA RM L50K30 (1951), Summary p. 1, p. 7 and Concluding Remarks p. 25 (conical inlets, M 1.9–2.7; 2D multi-ramp application is a Busemann extension)
+- The ideal subcritical branch is flat and ignores viscous losses; the buzz onset is an estimate; must be verified with a CFD solver.
+
 ## Validation summary
 
-Repository: https://github.com/Eski4239/SuperSonic-Inlet-Designer
+How it was checked: every relation in the solver follows NACA Report 1135, and an automated test suite of over 800 tests checks the results against closed-form values. The designs were also compared with 2D CFD simulations in Ansys Fluent (density-based solver, inviscid and k-ω SST viscous runs, with a mesh-refinement check). At the design point the total-pressure recovery agreed within 0.35%, and below the design Mach within 0.1%, with mass capture within 0.4%. With boundary layers included, recovery was about 2% lower, mainly because of a separation bubble at the second ramp corner, which Busemann's separation warning flags. Above the design Mach the CFD showed a Mach reflection at the cowl lip that this model does not include, so recovery there is an upper bound (the CFD was 4.9% lower at Mach 3.25).
 
-| Phase | Check | Result | Document |
-|---|---|---|---|
-| 3a | Inviscid CFD, design point (M 3, 2 ramps) | Outlet total pressure −0.35% vs the tool | docs/validation_3a.md |
-| 3b | Mesh check (refined mesh vs 3a) | Reproduces 3a within 0.15% everywhere | docs/validation_3b.md |
-| 3d | Off-design, below design Mach (M 2.5–3.0) | Recovery within 0.1%, mass capture within 0.4% | docs/validation_3d.md |
-| 3d | Off-design, above design Mach (M 3.25) | Recovery −4.9% vs the tool | docs/validation_3d.md |
+Repository: https://github.com/Eski4239/SuperSonic-Inlet-Designer
 
 ## CFD statement
 

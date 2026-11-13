@@ -1,7 +1,7 @@
 """Approximate incipient-separation checks (addendum C5, no Qt).
 
 Criteria and SOURCEs in inletdesign/separation.py (Korkegi 1975; normal-shock M ~ 1.3),
-pending user confirmation. The expected verdicts for the validation design are the Phase 3b
+originals not consulted (widely cited correlations). The expected verdicts for the validation design are the Phase 3b
 viscous CFD result (docs/validation_3b.md): a corner separation bubble at the second ramp
 corner (15.5 mm), none at the first ramp.
 """

@@ -4,7 +4,7 @@ Entry format (resources/explain/<name>.md):
 
     # Title, may use {{k}}
     ## Relations
-    <!-- SOURCE: reference, eq. N, p. P (pending user confirmation) -->
+    <!-- SOURCE: reference, eq. N, p. P -->
     $$ LaTeX (matplotlib mathtext) $$
     ## This case
     $$ ... {{sel.M1:.3f}} ... $$

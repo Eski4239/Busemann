@@ -1,9 +1,9 @@
 # Separation (approximate)
 
 ## Relations
-<!-- SOURCE: Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 (pending user confirmation) -->
+<!-- SOURCE: Korkegi, R. H., AIAA Journal 13(4), 1975, pp. 534–535 (original not consulted; widely cited correlation) -->
 $$ \frac{p_{is}}{p_1} = 1 + 0.3\,M_1^2 \qquad (M_1 \leq 4.5) $$
-<!-- SOURCE: Seddon, J. & Goldsmith, E. L., Intake Aerodynamics, 2nd ed., 1999 (pending user confirmation) -->
+<!-- SOURCE: Seddon, J. & Goldsmith, E. L., Intake Aerodynamics, 2nd ed., 1999 (original not consulted; widely cited correlation) -->
 $$ M_1 \geq 1.3 \quad \mathrm{(normal\ shock)} $$
 
 ## This case
