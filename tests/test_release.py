@@ -72,8 +72,8 @@ def test_main_writes_the_notes_and_rejects_a_wrong_tag(tmp_path, capsys):
     t = _tool()
     out = tmp_path / "notes" / "release_notes.md"
     assert t.main([f"v{__version__}", str(out)]) == 0
-    assert out.read_text(encoding="utf-8").strip() == t.section(
-        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), __version__)
+    assert out.read_text(encoding="utf-8").strip() == t.unwrap(t.section(
+        (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), __version__))
     assert t.main(["v0.0.1", str(tmp_path / "x.md")]) == 1
     assert "does not match" in capsys.readouterr().err
     assert not (tmp_path / "x.md").exists()
@@ -82,6 +82,52 @@ def test_main_writes_the_notes_and_rejects_a_wrong_tag(tmp_path, capsys):
 def test_changelog_has_a_section_for_this_version():
     body = _tool().section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), __version__)
     assert len(body) > 40
+
+
+def test_unwrap_joins_continuations_and_keeps_line_starts():
+    t = _tool()
+    text = ("Opening paragraph\nwrapped here\nand here.\n\n### Group\n- bullet one\n"
+            "  continues\n- bullet two\nplain continuation\n\n### Next\nParagraph after a "
+            "heading\nwrapped.\n  - nested bullet\n    nested continuation\n\n```\ncode\nline\n```")
+    assert t.unwrap(text) == (
+        "Opening paragraph wrapped here and here.\n\n### Group\n- bullet one continues\n"
+        "- bullet two plain continuation\n\n### Next\nParagraph after a heading wrapped.\n"
+        "  - nested bullet nested continuation\n\n```\ncode\nline\n```")
+    assert t.unwrap("a\n\n\nb") == "a\n\n\nb"                       # blank lines kept
+
+
+def _blocks(text):
+    return [b for b in text.split("\n\n") if b.strip()]
+
+
+def test_release_notes_are_one_line_per_paragraph_and_bullet():
+    t = _tool()
+    raw = t.section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), __version__)
+    notes = t.unwrap(raw)
+    assert len(notes.splitlines()) < len(raw.splitlines())
+    for line in notes.splitlines():                     # each line starts a unit, none wraps
+        assert line == "" or line.startswith(("### ", "- ")) or line[0].isupper(), line
+        assert not line.startswith(" ") and line == line.rstrip(), line
+    paragraphs = [ln for ln in notes.splitlines() if ln and not ln.startswith(("### ", "- "))]
+    assert len(paragraphs) == 1 and paragraphs[0].startswith("Busemann is a desktop design lab")
+    assert paragraphs[0].endswith("installer or portable zip.")
+    assert "`Busemann.exe --self-test`" in notes
+    # same blocks, headings and blank lines as the wrapped section; only line count changes
+    assert len(_blocks(notes)) == len(_blocks(raw)) == 10
+    assert [ln for ln in notes.splitlines() if ln.startswith("### ")] == \
+        [ln for ln in raw.splitlines() if ln.startswith("### ")]
+    assert notes.count("\n\n") == raw.count("\n\n")
+    assert [" ".join(b.split()) for b in _blocks(notes)] == [" ".join(b.split()) for b in
+                                                             _blocks(raw)]  # no text lost
+    bullets = [ln for ln in notes.splitlines() if ln.startswith("- ")]
+    assert len(bullets) == len([ln for ln in raw.splitlines() if ln.startswith("- ")])
+    assert all(b.rstrip()[-1] in ".)" for b in bullets), bullets
+
+
+def test_changelog_itself_stays_wrapped():
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert max(len(ln) for ln in changelog.splitlines()) <= 100
+    assert "`Busemann.exe\n  --self-test`" in changelog
 
 
 def test_development_notes_are_not_release_text():

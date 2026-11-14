@@ -4,7 +4,8 @@
 
 Checks that the tag is "v" + busemann.__version__ (the single version source), then writes
 that version's CHANGELOG.md section (its body, without the "## 1.0.0 ..." heading) to the
-output file. Exits non-zero with a clear message when the tag does not match the version, or
+output file, with hard-wrapped lines joined (`unwrap`) because GitHub keeps single line
+breaks in release descriptions; CHANGELOG.md itself stays wrapped. Exits non-zero with a clear message when the tag does not match the version, or
 the CHANGELOG has no (or an empty) section for it, so no release is published without notes.
 
 A section starts at a level-2 heading naming the version ("## 1.0.0 — first release",
@@ -47,6 +48,33 @@ def section(changelog_text, version):
     return body
 
 
+def _is_start(line):
+    """A line that always begins a new output line: a heading or a bullet."""
+    stripped = line.lstrip()
+    return stripped.startswith("#") or stripped.startswith("- ")
+
+
+def unwrap(body):
+    """Join hard-wrapped lines for the release page, where GitHub keeps single line breaks.
+
+    A continuation line (indented, or plain text directly after a non-blank, non-heading
+    line) is appended to the previous line with one space. Blank lines, headings and "- "
+    bullet starts stay line starts; fenced code blocks are copied unchanged."""
+    out, fenced = [], False
+    for line in body.splitlines():
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            out.append(line)
+            continue
+        prev = out[-1] if out else ""
+        if (not fenced and line.strip() and prev.strip() and not _is_start(line)
+                and not prev.lstrip().startswith("#") and not prev.lstrip().startswith("```")):
+            out[-1] = f"{prev.rstrip()} {line.strip()}"
+        else:
+            out.append(line)
+    return "\n".join(out)
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     if len(args) != 2:
@@ -56,7 +84,7 @@ def main(argv=None):
     try:
         version = app_version()
         check_tag(tag, version)
-        body = section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), version)
+        body = unwrap(section((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), version))
     except (ReleaseError, OSError) as exc:
         print(f"release notes: {exc}", file=sys.stderr)
         return 1
